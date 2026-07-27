@@ -8,9 +8,15 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  const DB_URL_RAW = 'https://jsonhosting.com/api/json/8457769f/raw';
-  const DB_URL_PATCH = 'https://jsonhosting.com/api/json/8457769f';
-  const DB_EDIT_KEY = '0ba0d838a40c2389f1d6748e083680c40d2bb0d908741671e5466897e5188807';
+  const KV_URL = process.env.KV_REST_API_URL;
+  const KV_TOKEN = process.env.KV_REST_API_TOKEN;
+
+  // If Vercel KV is not connected yet, fall back to a public mock/in-memory warning
+  if (!KV_URL || !KV_TOKEN) {
+    return res.status(500).json({ 
+      error: 'Vercel KV is not connected. Please go to Vercel dashboard -> Storage tab, create a KV database, and connect it to this project.' 
+    });
+  }
 
   const filterOldChats = (chats) => {
     const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000;
@@ -19,48 +25,73 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
-      const response = await fetch(DB_URL_RAW);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch from DB: ${response.status}`);
+      const [prodRes, chatRes] = await Promise.all([
+        fetch(`${KV_URL}/get/products`, { headers: { Authorization: `Bearer ${KV_TOKEN}` } }),
+        fetch(`${KV_URL}/get/chats`, { headers: { Authorization: `Bearer ${KV_TOKEN}` } })
+      ]);
+
+      const prodData = prodRes.ok ? await prodRes.json() : { result: null };
+      const chatData = chatRes.ok ? await chatRes.json() : { result: null };
+
+      let products = [];
+      let chats = [];
+
+      try {
+        if (prodData.result) {
+          products = JSON.parse(prodData.result);
+        }
+      } catch (e) {
+        console.error("Error parsing products:", e);
       }
-      const data = await response.json();
-      
+
+      try {
+        if (chatData.result) {
+          chats = JSON.parse(chatData.result);
+        }
+      } catch (e) {
+        console.error("Error parsing chats:", e);
+      }
+
       // Filter out chats older than 3 days
-      const cleanedChats = filterOldChats(data.chats);
-      if (cleanedChats.length !== (data.chats || []).length) {
-        data.chats = cleanedChats;
-        // Save cleaned data back to DB
-        await fetch(DB_URL_PATCH, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Edit-Key': DB_EDIT_KEY
-          },
-          body: JSON.stringify(data)
+      const cleanedChats = filterOldChats(chats);
+      if (cleanedChats.length !== chats.length) {
+        await fetch(`${KV_URL}/set/chats`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${KV_TOKEN}` },
+          body: JSON.stringify(JSON.stringify(cleanedChats))
         });
+        chats = cleanedChats;
       }
-      return res.status(200).json(data);
+
+      return res.status(200).json({ products, chats });
+
     } else if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
       const bodyData = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-      
-      // Filter out chats older than 3 days
-      if (bodyData && bodyData.chats) {
-        bodyData.chats = filterOldChats(bodyData.chats);
+      const promises = [];
+
+      if (bodyData && bodyData.products !== undefined) {
+        promises.push(
+          fetch(`${KV_URL}/set/products`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${KV_TOKEN}` },
+            body: JSON.stringify(JSON.stringify(bodyData.products))
+          })
+        );
       }
-      
-      const response = await fetch(DB_URL_PATCH, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Edit-Key': DB_EDIT_KEY
-        },
-        body: JSON.stringify(bodyData)
-      });
-      if (!response.ok) {
-        throw new Error(`Failed to save to DB: ${response.status}`);
+
+      if (bodyData && bodyData.chats !== undefined) {
+        const cleanedChats = filterOldChats(bodyData.chats);
+        promises.push(
+          fetch(`${KV_URL}/set/chats`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${KV_TOKEN}` },
+            body: JSON.stringify(JSON.stringify(cleanedChats))
+          })
+        );
       }
-      const data = await response.json();
-      return res.status(200).json(data);
+
+      await Promise.all(promises);
+      return res.status(200).json({ status: 'success' });
     } else {
       return res.status(405).json({ error: 'Method not allowed' });
     }
