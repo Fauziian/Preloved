@@ -1273,7 +1273,7 @@ function ProductForm({ initial, onSave, onCancel }: { initial?: Product; onSave:
         </div>
 
         {/* Status + Actions */}
-        <div className="bg-white rounded-2xl border border-pink-100 p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="bg-white rounded-2xl border border-pink-100 p-5 flex flex-col md:flex-row flex-wrap items-start md:items-center justify-between gap-4">
           <div>
             <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2 block">Status Produk</label>
             <div className="flex flex-wrap gap-2">
@@ -1295,10 +1295,10 @@ function ProductForm({ initial, onSave, onCancel }: { initial?: Product; onSave:
             </div>
           </div>
           <div className="flex gap-3 w-full md:w-auto">
-            <button type="button" onClick={onCancel} className="flex-1 md:flex-none px-5 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">Batal</button>
+            <button type="button" onClick={onCancel} className="flex-1 md:flex-none px-4 py-2 border border-gray-200 rounded-full text-xs font-bold text-gray-600 hover:bg-gray-50 transition-colors">Batal</button>
             <button type="submit" disabled={saving}
-              className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2.5 bg-gradient-to-r from-pink-500 to-violet-600 text-white font-bold rounded-xl hover:shadow-lg hover:shadow-pink-200 transition-all text-sm disabled:opacity-60">
-              {saving ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Check size={15} />}
+              className="flex-1 md:flex-none flex items-center justify-center gap-2 px-5 py-2 bg-gradient-to-r from-pink-500 to-violet-600 text-white font-bold rounded-full hover:shadow-lg hover:shadow-pink-200 transition-all text-xs disabled:opacity-60">
+              {saving ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Check size={14} />}
               {initial ? "Simpan Perubahan" : "Simpan Produk"}
             </button>
           </div>
