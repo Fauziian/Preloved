@@ -1722,7 +1722,7 @@ function AdminChat() {
 
       <div className="bg-white rounded-2xl border border-pink-100 shadow-sm overflow-hidden flex" style={{ height: "600px" }}>
         {/* Session list */}
-        <div className="w-72 border-r border-pink-100 flex flex-col shrink-0">
+        <div className={`w-full md:w-72 border-r border-pink-100 flex flex-col shrink-0 ${activeId ? "hidden md:flex" : "flex"}`}>
           <div className="px-4 py-3 border-b border-pink-100">
             <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">{sessions.length} percakapan</p>
           </div>
@@ -1767,9 +1767,16 @@ function AdminChat() {
 
         {/* Chat area */}
         {active ? (
-          <div className="flex-1 flex flex-col min-w-0">
+          <div className={`flex-1 flex flex-col min-w-0 ${activeId ? "flex" : "hidden md:flex"}`}>
             {/* Chat header */}
             <div className="px-5 py-3 border-b border-pink-100 flex items-center gap-3 bg-[#fdf7fb]">
+              <button
+                onClick={() => setActiveId(null)}
+                className="md:hidden p-1 mr-1 text-gray-500 hover:text-pink-500 hover:bg-pink-50 rounded-lg transition-colors flex items-center justify-center"
+                aria-label="Kembali"
+              >
+                <ChevronLeft size={20} />
+              </button>
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-400 to-violet-500 flex items-center justify-center text-white text-xs font-bold">
                 {active.guestLabel.slice(-2)}
               </div>
@@ -1819,7 +1826,7 @@ function AdminChat() {
             </div>
           </div>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
+          <div className={`flex-1 flex flex-col items-center justify-center text-center p-8 ${activeId ? "flex" : "hidden md:flex"}`}>
             <div className="w-16 h-16 bg-gradient-to-br from-pink-100 to-violet-100 rounded-full flex items-center justify-center mb-4">
               <MessageCircle size={28} className="text-pink-400" />
             </div>
