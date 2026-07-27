@@ -108,7 +108,7 @@ function getOrCreateSession(): ChatSession {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const CATEGORIES = ["Semua", "Fashion Wanita", "Fashion Pria", "Tas", "Sepatu", "Aksesoris", "Elektronik", "Koleksi", "Beauty", "Rumah Tangga", "Lainnya"];
-const CONDITIONS = ["Baru", "Sangat Baik", "Baik", "Cukup"];
+const CONDITIONS = ["Baru", "Bekas"];
 const ADMIN_USER = "admin";
 const ADMIN_PASS = "sherly2004";
 const STORAGE_KEY = "sherly_products";
@@ -1103,7 +1103,7 @@ const FORM_INP = "w-full px-4 py-3 bg-[#fdf7fb] border border-pink-200 rounded-x
 // ─── Product Form ─────────────────────────────────────────────────────────────
 function ProductForm({ initial, onSave, onCancel }: { initial?: Product; onSave: (p: Product) => void; onCancel: () => void }) {
   const [form, setForm] = useState<Product>(initial ?? {
-    id: uid(), name: "", price: 0, originalPrice: 0, description: "", condition: "Sangat Baik",
+    id: uid(), name: "", price: 0, originalPrice: 0, description: "", condition: "Baru",
     brand: "", category: "Fashion Wanita", stock: 1, weight: "", material: "", tags: [],
     status: "published", shopeeLink: "", photos: [], variants: [], createdAt: new Date().toISOString().split("T")[0],
   });
@@ -1162,7 +1162,26 @@ function ProductForm({ initial, onSave, onCancel }: { initial?: Product; onSave:
   }, [addTag]);
 
   const submit = useCallback((e: React.FormEvent) => {
-    e.preventDefault(); setSaving(true);
+    e.preventDefault();
+    
+    // Validation
+    const hasPhotos = form.photos && form.photos.length >= 1;
+    const hasName = form.name && form.name.trim() !== "";
+    const hasPrice = form.price && form.price > 0;
+    const hasCondition = form.condition && form.condition.trim() !== "";
+    const hasCategory = form.category && form.category.trim() !== "";
+    const hasBrand = form.brand && form.brand.trim() !== "";
+    const hasStock = form.stock !== undefined && form.stock >= 0;
+    const hasWeight = form.weight && form.weight.trim() !== "";
+    const hasMaterial = form.material && form.material.trim() !== "";
+    const hasDescription = form.description && form.description.trim() !== "";
+
+    if (!hasPhotos || !hasName || !hasPrice || !hasCondition || !hasCategory || !hasBrand || !hasStock || !hasWeight || !hasMaterial || !hasDescription) {
+      alert("form wajib di isi");
+      return;
+    }
+
+    setSaving(true);
     setTimeout(() => { onSave(form); setSaving(false); }, 500);
   }, [form, onSave]);
 
@@ -1175,7 +1194,7 @@ function ProductForm({ initial, onSave, onCancel }: { initial?: Product; onSave:
       <form onSubmit={submit} className="space-y-5">
         {/* Photos */}
         <div className="bg-white rounded-2xl border border-pink-100 p-6 space-y-4">
-          <h2 className="font-bold text-[#1a0a2e] flex items-center gap-2"><Camera size={16} className="text-pink-500" /> Foto Produk</h2>
+          <h2 className="font-bold text-[#1a0a2e] flex items-center gap-2"><Camera size={16} className="text-pink-500" /> Foto Produk <span className="text-red-400 ml-1">*</span></h2>
           <div className="flex flex-wrap gap-3">
             {form.photos.map((ph, i) => (
               <div key={i} className="relative w-24 h-24 rounded-xl overflow-hidden border border-pink-200 group">
@@ -1199,22 +1218,22 @@ function ProductForm({ initial, onSave, onCancel }: { initial?: Product; onSave:
         {/* Info */}
         <div className="bg-white rounded-2xl border border-pink-100 p-6 space-y-4">
           <h2 className="font-bold text-[#1a0a2e] flex items-center gap-2"><AlertCircle size={16} className="text-violet-500" /> Informasi Produk</h2>
-          <FormField label="Nama Produk" req><input required value={form.name} onChange={handleName} placeholder="Cth: Sweater Rajut Pink Oversize" className={FORM_INP} /></FormField>
+          <FormField label="Nama Produk" req><input value={form.name} onChange={handleName} placeholder="Cth: Sweater Rajut Pink Oversize" className={FORM_INP} /></FormField>
           <div className="grid grid-cols-2 gap-4">
-            <FormField label="Harga Jual" req><input required type="number" min={0} value={form.price || ""} onChange={handlePrice} placeholder="85000" className={FORM_INP} /></FormField>
+            <FormField label="Harga Jual" req><input type="number" min={0} value={form.price || ""} onChange={handlePrice} placeholder="85000" className={FORM_INP} /></FormField>
             <FormField label="Harga Coret (Opsional)"><input type="number" min={0} value={form.originalPrice || ""} onChange={handleOriginalPrice} placeholder="320000" className={FORM_INP} /></FormField>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <FormField label="Kondisi"><select value={form.condition} onChange={handleCondition} className={FORM_INP}>{CONDITIONS.map((c) => <option key={c}>{c}</option>)}</select></FormField>
-            <FormField label="Kategori"><select value={form.category} onChange={handleCategory} className={FORM_INP}>{CATEGORIES.filter((c) => c !== "Semua").map((c) => <option key={c}>{c}</option>)}</select></FormField>
+            <FormField label="Kondisi" req><select value={form.condition} onChange={handleCondition} className={FORM_INP}>{CONDITIONS.map((c) => <option key={c}>{c}</option>)}</select></FormField>
+            <FormField label="Kategori" req><select value={form.category} onChange={handleCategory} className={FORM_INP}>{CATEGORIES.filter((c) => c !== "Semua").map((c) => <option key={c}>{c}</option>)}</select></FormField>
           </div>
           <div className="grid grid-cols-3 gap-4">
-            <FormField label="Brand"><input value={form.brand} onChange={handleBrand} placeholder="Zara, H&M..." className={FORM_INP} /></FormField>
-            <FormField label="Stok (pcs)"><input type="number" min={0} value={form.stock} onChange={handleStock} className={FORM_INP} /></FormField>
-            <FormField label="Berat"><input value={form.weight} onChange={handleWeight} placeholder="300g" className={FORM_INP} /></FormField>
+            <FormField label="Brand" req><input value={form.brand} onChange={handleBrand} placeholder="Zara, H&M..." className={FORM_INP} /></FormField>
+            <FormField label="Stok (pcs)" req><input type="number" min={0} value={form.stock} onChange={handleStock} className={FORM_INP} /></FormField>
+            <FormField label="Berat" req><input value={form.weight} onChange={handleWeight} placeholder="300g" className={FORM_INP} /></FormField>
           </div>
-          <FormField label="Material"><input value={form.material} onChange={handleMaterial} placeholder="Cotton, Chiffon, Rajut..." className={FORM_INP} /></FormField>
-          <FormField label="Deskripsi Produk"><textarea rows={4} value={form.description} onChange={handleDescription} placeholder="Deskripsikan produk secara lengkap dan jujur..." className={FORM_INP + " resize-none"} /></FormField>
+          <FormField label="Material" req><input value={form.material} onChange={handleMaterial} placeholder="Cotton, Chiffon, Rajut..." className={FORM_INP} /></FormField>
+          <FormField label="Deskripsi Produk" req><textarea rows={4} value={form.description} onChange={handleDescription} placeholder="Deskripsikan produk secara lengkap dan jujur..." className={FORM_INP + " resize-none"} /></FormField>
           <FormField label="Link Shopee">
             <input value={form.shopeeLink} onChange={handleShopeeLink} placeholder="https://shopee.co.id/produk-anda-xxxx" className={FORM_INP} />
             <p className="text-xs text-gray-400 mt-1">Tombol "Beli di Shopee" hanya muncul jika link ini diisi</p>
@@ -1326,7 +1345,7 @@ export default function App() {
   // Track visit on first load
   useEffect(() => { recordVisit(); }, []);
 
-  // Fetch initial products from Supabase and set up real-time subscription
+  // Fetch initial products from database on load
   useEffect(() => {
     async function initDb() {
       const dbProds = await dbFetchProducts();
@@ -1336,16 +1355,6 @@ export default function App() {
       }
     }
     initDb();
-
-    // Subscribe to realtime product changes
-    const unsub = dbSubscribeRealtime("products", async () => {
-      const dbProds = await dbFetchProducts();
-      if (dbProds) {
-        setProducts(dbProds);
-        saveProds(dbProds);
-      }
-    });
-    return unsub;
   }, []);
 
   const nav = (p: Page) => {
@@ -1357,9 +1366,12 @@ export default function App() {
   const goDetail = (p: Product) => { setDetailProd(p); recordProductView(p.id); setPage("detail"); window.scrollTo({ top: 0 }); };
 
   const handleSave = async (p: Product) => {
-    // Optimistic UI update
-    setProducts((prev) => prev.find((x) => x.id === p.id) ? prev.map((x) => x.id === p.id ? p : x) : [...prev, p]);
-    saveProds(products.find((x) => x.id === p.id) ? products.map((x) => x.id === p.id ? p : x) : [...products, p]);
+    // Optimistic UI update with functional state to avoid closure bugs
+    setProducts((prev) => {
+      const next = prev.find((x) => x.id === p.id) ? prev.map((x) => x.id === p.id ? p : x) : [...prev, p];
+      saveProds(next);
+      return next;
+    });
     
     // Save to database
     await dbSaveProduct(p as any);
@@ -1420,23 +1432,23 @@ export default function App() {
               <AdminProducts products={products} onAdd={() => nav("admin-add")}
                 onEdit={(p) => { setEditProd(p); nav("admin-edit"); }}
                 onDelete={async (id) => {
-                  setProducts((prev) => prev.filter((p) => p.id !== id));
-                  saveProds(products.filter((p) => p.id !== id));
+                  setProducts((prev) => {
+                    const next = prev.filter((p) => p.id !== id);
+                    saveProds(next);
+                    return next;
+                  });
                   await dbDeleteProduct(id);
                 }}
                 onToggle={async (id) => {
-                  let targetProd: Product | null = null;
-                  setProducts((prev) => prev.map((p) => {
-                    if (p.id === id) {
-                      targetProd = { ...p, status: p.status === "published" ? "draft" : "published" };
-                      return targetProd;
+                  setProducts((prev) => {
+                    const next = prev.map((p) => p.id === id ? { ...p, status: p.status === "published" ? "draft" : "published" } : p);
+                    saveProds(next);
+                    const target = next.find((p) => p.id === id);
+                    if (target) {
+                      dbSaveProduct(target as any);
                     }
-                    return p;
-                  }));
-                  if (targetProd) {
-                    saveProds(products.map((p) => p.id === id ? { ...p, status: p.status === "published" ? "draft" : "published" } : p));
-                    await dbSaveProduct(targetProd as any);
-                  }
+                    return next;
+                  });
                 }} />
             )}
             {page === "admin-add" && <ProductForm onSave={handleSave} onCancel={() => nav("admin-products")} />}
