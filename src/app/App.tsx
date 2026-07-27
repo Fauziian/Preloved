@@ -1034,6 +1034,20 @@ function AdminProducts({ products, onAdd, onEdit, onDelete, onToggle }: {
   );
 }
 
+// ─── FormField (must be outside ProductForm to prevent keyboard loss on mobile) ─
+function FormField({ label, children, req }: { label: string; children: React.ReactNode; req?: boolean }) {
+  return (
+    <div>
+      <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5 block">
+        {label}{req && <span className="text-red-400 ml-1">*</span>}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+const FORM_INP = "w-full px-4 py-3 bg-[#fdf7fb] border border-pink-200 rounded-xl text-sm outline-none focus:border-pink-400 transition-colors";
+
 // ─── Product Form ─────────────────────────────────────────────────────────────
 function ProductForm({ initial, onSave, onCancel }: { initial?: Product; onSave: (p: Product) => void; onCancel: () => void }) {
   const [form, setForm] = useState<Product>(initial ?? {
@@ -1044,29 +1058,61 @@ function ProductForm({ initial, onSave, onCancel }: { initial?: Product; onSave:
   const [tagInput, setTagInput] = useState("");
   const [saving, setSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
   const up = useCallback(<K extends keyof Product>(k: K, v: Product[K]) => setForm((f) => ({ ...f, [k]: v })), []);
 
-  const handlePhotos = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotos = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     Array.from(e.target.files ?? []).forEach((file) => {
       const reader = new FileReader();
       reader.onload = (ev) => setForm((f) => ({ ...f, photos: [...f.photos, ev.target?.result as string] }));
       reader.readAsDataURL(file);
     });
     e.target.value = "";
-  };
+  }, []);
 
-  const addTag = () => { if (!tagInput.trim()) return; up("tags", [...form.tags, tagInput.trim().toLowerCase()]); setTagInput(""); };
-  const addVariant = () => setForm((f) => ({ ...f, variants: [...f.variants, { name: "", options: [] }] }));
-  const removeVariant = (i: number) => setForm((f) => ({ ...f, variants: f.variants.filter((_, idx) => idx !== i) }));
-  const upVName = (i: number, name: string) => setForm((f) => { const v = [...f.variants]; v[i] = { ...v[i], name }; return { ...f, variants: v }; });
-  const upVOpts = (i: number, raw: string) => { const opts = raw.split(",").map((s) => s.trim()).filter(Boolean); setForm((f) => { const v = [...f.variants]; v[i] = { ...v[i], options: opts }; return { ...f, variants: v }; }); };
+  const handleName = useCallback((e: React.ChangeEvent<HTMLInputElement>) => up("name", e.target.value), [up]);
+  const handlePrice = useCallback((e: React.ChangeEvent<HTMLInputElement>) => up("price", parseInt(e.target.value) || 0), [up]);
+  const handleOriginalPrice = useCallback((e: React.ChangeEvent<HTMLInputElement>) => up("originalPrice", parseInt(e.target.value) || 0), [up]);
+  const handleCondition = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => up("condition", e.target.value), [up]);
+  const handleCategory = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => up("category", e.target.value), [up]);
+  const handleBrand = useCallback((e: React.ChangeEvent<HTMLInputElement>) => up("brand", e.target.value), [up]);
+  const handleStock = useCallback((e: React.ChangeEvent<HTMLInputElement>) => up("stock", parseInt(e.target.value) || 0), [up]);
+  const handleWeight = useCallback((e: React.ChangeEvent<HTMLInputElement>) => up("weight", e.target.value), [up]);
+  const handleMaterial = useCallback((e: React.ChangeEvent<HTMLInputElement>) => up("material", e.target.value), [up]);
+  const handleDescription = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => up("description", e.target.value), [up]);
+  const handleShopeeLink = useCallback((e: React.ChangeEvent<HTMLInputElement>) => up("shopeeLink", e.target.value), [up]);
+  const handleTagInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => setTagInput(e.target.value), []);
 
-  const submit = (e: React.FormEvent) => { e.preventDefault(); setSaving(true); setTimeout(() => { onSave(form); setSaving(false); }, 500); };
+  const addTag = useCallback(() => {
+    if (!tagInput.trim()) return;
+    setForm((f) => ({ ...f, tags: [...f.tags, tagInput.trim().toLowerCase()] }));
+    setTagInput("");
+  }, [tagInput]);
 
-  const Field = ({ label, children, req }: { label: string; children: React.ReactNode; req?: boolean }) => (
-    <div><label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5 block">{label}{req && <span className="text-red-400 ml-1">*</span>}</label>{children}</div>
-  );
-  const inp = "w-full px-4 py-3 bg-[#fdf7fb] border border-pink-200 rounded-xl text-sm outline-none focus:border-pink-400 transition-colors";
+  const addVariant = useCallback(() => setForm((f) => ({ ...f, variants: [...f.variants, { name: "", options: [] }] })), []);
+
+  const removeVariant = useCallback((i: number) => setForm((f) => ({ ...f, variants: f.variants.filter((_, idx) => idx !== i) })), []);
+
+  const upVName = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const i = parseInt(e.currentTarget.dataset.idx!);
+    const name = e.target.value;
+    setForm((f) => { const v = [...f.variants]; v[i] = { ...v[i], name }; return { ...f, variants: v }; });
+  }, []);
+
+  const upVOpts = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const i = parseInt(e.currentTarget.dataset.idx!);
+    const opts = e.target.value.split(",").map((s) => s.trim()).filter(Boolean);
+    setForm((f) => { const v = [...f.variants]; v[i] = { ...v[i], options: opts }; return { ...f, variants: v }; });
+  }, []);
+
+  const handleTagKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") { e.preventDefault(); addTag(); }
+  }, [addTag]);
+
+  const submit = useCallback((e: React.FormEvent) => {
+    e.preventDefault(); setSaving(true);
+    setTimeout(() => { onSave(form); setSaving(false); }, 500);
+  }, [form, onSave]);
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -1101,26 +1147,26 @@ function ProductForm({ initial, onSave, onCancel }: { initial?: Product; onSave:
         {/* Info */}
         <div className="bg-white rounded-2xl border border-pink-100 p-6 space-y-4">
           <h2 className="font-bold text-[#1a0a2e] flex items-center gap-2"><AlertCircle size={16} className="text-violet-500" /> Informasi Produk</h2>
-          <Field label="Nama Produk" req><input required value={form.name} onChange={(e) => up("name", e.target.value)} placeholder="Cth: Sweater Rajut Pink Oversize" className={inp} /></Field>
+          <FormField label="Nama Produk" req><input required value={form.name} onChange={handleName} placeholder="Cth: Sweater Rajut Pink Oversize" className={FORM_INP} /></FormField>
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Harga Jual" req><input required type="number" min={0} value={form.price || ""} onChange={(e) => up("price", parseInt(e.target.value) || 0)} placeholder="85000" className={inp} /></Field>
-            <Field label="Harga Coret (Opsional)"><input type="number" min={0} value={form.originalPrice || ""} onChange={(e) => up("originalPrice", parseInt(e.target.value) || 0)} placeholder="320000" className={inp} /></Field>
+            <FormField label="Harga Jual" req><input required type="number" min={0} value={form.price || ""} onChange={handlePrice} placeholder="85000" className={FORM_INP} /></FormField>
+            <FormField label="Harga Coret (Opsional)"><input type="number" min={0} value={form.originalPrice || ""} onChange={handleOriginalPrice} placeholder="320000" className={FORM_INP} /></FormField>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Kondisi"><select value={form.condition} onChange={(e) => up("condition", e.target.value)} className={inp}>{CONDITIONS.map((c) => <option key={c}>{c}</option>)}</select></Field>
-            <Field label="Kategori"><select value={form.category} onChange={(e) => up("category", e.target.value)} className={inp}>{CATEGORIES.filter((c) => c !== "Semua").map((c) => <option key={c}>{c}</option>)}</select></Field>
+            <FormField label="Kondisi"><select value={form.condition} onChange={handleCondition} className={FORM_INP}>{CONDITIONS.map((c) => <option key={c}>{c}</option>)}</select></FormField>
+            <FormField label="Kategori"><select value={form.category} onChange={handleCategory} className={FORM_INP}>{CATEGORIES.filter((c) => c !== "Semua").map((c) => <option key={c}>{c}</option>)}</select></FormField>
           </div>
           <div className="grid grid-cols-3 gap-4">
-            <Field label="Brand"><input value={form.brand} onChange={(e) => up("brand", e.target.value)} placeholder="Zara, H&M..." className={inp} /></Field>
-            <Field label="Stok (pcs)"><input type="number" min={0} value={form.stock} onChange={(e) => up("stock", parseInt(e.target.value) || 0)} className={inp} /></Field>
-            <Field label="Berat"><input value={form.weight} onChange={(e) => up("weight", e.target.value)} placeholder="300g" className={inp} /></Field>
+            <FormField label="Brand"><input value={form.brand} onChange={handleBrand} placeholder="Zara, H&M..." className={FORM_INP} /></FormField>
+            <FormField label="Stok (pcs)"><input type="number" min={0} value={form.stock} onChange={handleStock} className={FORM_INP} /></FormField>
+            <FormField label="Berat"><input value={form.weight} onChange={handleWeight} placeholder="300g" className={FORM_INP} /></FormField>
           </div>
-          <Field label="Material"><input value={form.material} onChange={(e) => up("material", e.target.value)} placeholder="Cotton, Chiffon, Rajut..." className={inp} /></Field>
-          <Field label="Deskripsi Produk"><textarea rows={4} value={form.description} onChange={(e) => up("description", e.target.value)} placeholder="Deskripsikan produk secara lengkap dan jujur..." className={inp + " resize-none"} /></Field>
-          <Field label="Link Shopee">
-            <input value={form.shopeeLink} onChange={(e) => up("shopeeLink", e.target.value)} placeholder="https://shopee.co.id/produk-anda-xxxx" className={inp} />
+          <FormField label="Material"><input value={form.material} onChange={handleMaterial} placeholder="Cotton, Chiffon, Rajut..." className={FORM_INP} /></FormField>
+          <FormField label="Deskripsi Produk"><textarea rows={4} value={form.description} onChange={handleDescription} placeholder="Deskripsikan produk secara lengkap dan jujur..." className={FORM_INP + " resize-none"} /></FormField>
+          <FormField label="Link Shopee">
+            <input value={form.shopeeLink} onChange={handleShopeeLink} placeholder="https://shopee.co.id/produk-anda-xxxx" className={FORM_INP} />
             <p className="text-xs text-gray-400 mt-1">Tombol "Beli di Shopee" hanya muncul jika link ini diisi</p>
-          </Field>
+          </FormField>
         </div>
 
         {/* Variants */}
@@ -1133,8 +1179,8 @@ function ProductForm({ initial, onSave, onCancel }: { initial?: Product; onSave:
           {form.variants.map((v, i) => (
             <div key={i} className="flex gap-3 items-center">
               <div className="flex-1 grid grid-cols-2 gap-3">
-                <input value={v.name} onChange={(e) => upVName(i, e.target.value)} placeholder="Nama variasi (Ukuran)" className="px-3 py-2.5 bg-[#fdf7fb] border border-pink-200 rounded-xl text-sm outline-none focus:border-pink-400" />
-                <input value={v.options.join(", ")} onChange={(e) => upVOpts(i, e.target.value)} placeholder="Opsi dipisah koma: S, M, L" className="px-3 py-2.5 bg-[#fdf7fb] border border-pink-200 rounded-xl text-sm outline-none focus:border-pink-400" />
+                <input data-idx={i} value={v.name} onChange={upVName} placeholder="Nama variasi (Ukuran)" className="px-3 py-2.5 bg-[#fdf7fb] border border-pink-200 rounded-xl text-sm outline-none focus:border-pink-400" />
+                <input data-idx={i} value={v.options.join(", ")} onChange={upVOpts} placeholder="Opsi dipisah koma: S, M, L" className="px-3 py-2.5 bg-[#fdf7fb] border border-pink-200 rounded-xl text-sm outline-none focus:border-pink-400" />
               </div>
               <button type="button" onClick={() => removeVariant(i)} className="w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 flex items-center justify-center transition-colors flex-shrink-0"><X size={14} className="text-red-500" /></button>
             </div>
@@ -1145,7 +1191,7 @@ function ProductForm({ initial, onSave, onCancel }: { initial?: Product; onSave:
         <div className="bg-white rounded-2xl border border-pink-100 p-6 space-y-3">
           <h2 className="font-bold text-[#1a0a2e] flex items-center gap-2"><ChevronRight size={16} className="text-pink-400" /> Tag Produk</h2>
           <div className="flex gap-2">
-            <input value={tagInput} onChange={(e) => setTagInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addTag())} placeholder="Ketik tag lalu Enter atau klik Tambah" className={inp} />
+            <input value={tagInput} onChange={handleTagInput} onKeyDown={handleTagKeyDown} placeholder="Ketik tag lalu Enter atau klik Tambah" className={FORM_INP} />
             <button type="button" onClick={addTag} className="px-4 py-2.5 bg-pink-100 hover:bg-pink-200 text-pink-600 font-semibold rounded-xl text-sm transition-colors whitespace-nowrap">+ Tambah</button>
           </div>
           <div className="flex flex-wrap gap-2">
