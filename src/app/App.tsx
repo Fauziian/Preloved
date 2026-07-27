@@ -1293,11 +1293,35 @@ function ProductForm({ initial, onSave, onCancel }: { initial?: Product; onSave:
 // ROOT APP
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function App() {
-  const [page, setPage] = useState<Page>("catalog");
+  const [adminLoggedIn, setAdminLoggedIn] = useState(() => localStorage.getItem("sherly_admin_logged_in") === "true");
+  const [page, setPage] = useState<Page>(() => {
+    const saved = sessionStorage.getItem("sherly_current_page") as Page;
+    if (saved) {
+      if (saved.startsWith("admin") && !adminLoggedIn && saved !== "admin-login") {
+        const logged = localStorage.getItem("sherly_admin_logged_in") === "true";
+        if (!logged) return "catalog";
+      }
+      return saved;
+    }
+    return "catalog";
+  });
   const [products, setProducts] = useState<Product[]>(loadProds);
   const [detailProd, setDetailProd] = useState<Product | null>(null);
   const [editProd, setEditProd] = useState<Product | null>(null);
-  const [adminLoggedIn, setAdminLoggedIn] = useState(false);
+
+  // Sync page state
+  useEffect(() => {
+    sessionStorage.setItem("sherly_current_page", page);
+  }, [page]);
+
+  // Sync admin login state
+  useEffect(() => {
+    if (adminLoggedIn) {
+      localStorage.setItem("sherly_admin_logged_in", "true");
+    } else {
+      localStorage.removeItem("sherly_admin_logged_in");
+    }
+  }, [adminLoggedIn]);
 
   // Track visit on first load
   useEffect(() => { recordVisit(); }, []);
