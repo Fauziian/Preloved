@@ -58,7 +58,7 @@ function getOrCreateSession(): ChatSession {
 const CATEGORIES = ["Semua", "Fashion Wanita", "Fashion Pria", "Tas", "Sepatu", "Aksesoris", "Elektronik", "Koleksi", "Beauty", "Rumah Tangga", "Lainnya"];
 const CONDITIONS = ["Baru", "Sangat Baik", "Baik", "Cukup"];
 const ADMIN_USER = "admin";
-const ADMIN_PASS = "sherly2024";
+const ADMIN_PASS = "sherly2004";
 const STORAGE_KEY = "sherly_products";
 const PIE_COLORS = ["#ec4899", "#8b5cf6", "#6366f1", "#f59e0b", "#10b981", "#3b82f6"];
 
@@ -547,18 +547,6 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
           <p className="text-white/70 text-sm mt-1">Admin Panel · Masuk untuk mengelola produk</p>
         </div>
         <form onSubmit={submit} className="p-8 space-y-5">
-          {/* Credential hint box */}
-          <div className="bg-violet-50 border border-violet-200 rounded-2xl p-4 space-y-1">
-            <p className="text-xs font-bold text-violet-600 uppercase tracking-wide">Kredensial Admin</p>
-            <div className="flex justify-between text-sm">
-              <span className="text-violet-500">Username</span>
-              <code className="font-bold text-violet-700 bg-white px-2 py-0.5 rounded-md border border-violet-200">admin</code>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-violet-500">Password</span>
-              <code className="font-bold text-violet-700 bg-white px-2 py-0.5 rounded-md border border-violet-200">sherly2024</code>
-            </div>
-          </div>
           <div>
             <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5 block">Username</label>
             <input value={user} onChange={(e) => setUser(e.target.value)} required placeholder="admin"
