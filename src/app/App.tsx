@@ -45,8 +45,55 @@ interface ChatSession { sessionId: string; guestLabel: string; messages: ChatMsg
 const CHAT_KEY = "sherly_chats";
 const CHAT_SESSION_KEY = "sherly_chat_session";
 
-function loadChats(): ChatSession[] { try { const r = localStorage.getItem(CHAT_KEY); if (r) return JSON.parse(r); } catch {} return []; }
-function saveChats(s: ChatSession[]) { localStorage.setItem(CHAT_KEY, JSON.stringify(s)); }
+function loadChats(): ChatSession[] {
+  try {
+    const r = localStorage.getItem(CHAT_KEY);
+    if (r) {
+      const chats = JSON.parse(r) as ChatSession[];
+      const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000;
+      const cleaned = chats.filter(c => c.lastActivity > threeDaysAgo);
+      if (cleaned.length !== chats.length) {
+        localStorage.setItem(CHAT_KEY, JSON.stringify(cleaned));
+      }
+      return cleaned;
+    }
+  } catch {}
+  return [];
+}
+
+function saveChats(s: ChatSession[]) {
+  const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000;
+  const cleaned = s.filter(c => c.lastActivity > threeDaysAgo);
+  localStorage.setItem(CHAT_KEY, JSON.stringify(cleaned));
+}
+
+function mergeMessages(local: ChatMsg[], remote: ChatMsg[]): ChatMsg[] {
+  const map = new Map<string, ChatMsg>();
+  (local || []).forEach(m => map.set(m.id, m));
+  (remote || []).forEach(m => map.set(m.id, m));
+  return Array.from(map.values()).sort((a, b) => a.ts - b.ts);
+}
+
+function mergeSessions(local: ChatSession[], remote: ChatSession[]): ChatSession[] {
+  const map = new Map<string, ChatSession>();
+  (local || []).forEach(s => map.set(s.sessionId, s));
+  (remote || []).forEach(s => {
+    const loc = map.get(s.sessionId);
+    if (loc) {
+      map.set(s.sessionId, {
+        sessionId: s.sessionId,
+        guestLabel: s.guestLabel || loc.guestLabel,
+        messages: mergeMessages(loc.messages, s.messages),
+        lastActivity: Math.max(s.lastActivity, loc.lastActivity),
+        unreadByAdmin: s.lastActivity > loc.lastActivity ? s.unreadByAdmin : loc.unreadByAdmin
+      });
+    } else {
+      map.set(s.sessionId, s);
+    }
+  });
+  return Array.from(map.values());
+}
+
 function getOrCreateSession(): ChatSession {
   let sid = sessionStorage.getItem(CHAT_SESSION_KEY);
   const chats = loadChats();
@@ -1413,8 +1460,13 @@ function GuestChatWidget() {
   const refresh = useCallback(async () => {
     if (!session) return;
     const dbSessions = await dbFetchChats();
+    const chats = loadChats();
+    
     if (dbSessions) {
-      const updated = dbSessions.find((c) => c.sessionId === session.sessionId);
+      const mergedChats = mergeSessions(chats, dbSessions);
+      saveChats(mergedChats);
+      
+      const updated = mergedChats.find((c) => c.sessionId === session.sessionId);
       if (updated) {
         const prevLen = msgs.length;
         setMsgs(updated.messages);
@@ -1424,7 +1476,6 @@ function GuestChatWidget() {
       }
     } else {
       // LocalStorage Fallback
-      const chats = loadChats();
       const updated = chats.find((c) => c.sessionId === session.sessionId);
       if (updated) {
         const prevLen = msgs.length;
@@ -1478,9 +1529,9 @@ function GuestChatWidget() {
     setMsgs(newMsgs);
     setInput("");
 
-    // Sync with database
-    await dbSaveChatMessage(msg, session.sessionId);
-    await dbUpsertChatSession(updated);
+    // Sync with database asynchronously (no await to prevent UI latency)
+    dbSaveChatMessage(msg, session.sessionId);
+    dbUpsertChatSession(updated);
   };
 
   const submitName = async () => {
@@ -1639,12 +1690,13 @@ function AdminChat() {
 
   const refresh = useCallback(async () => {
     const dbSessions = await dbFetchChats();
+    const all = loadChats();
     if (dbSessions) {
-      setSessions([...dbSessions].sort((a, b) => b.lastActivity - a.lastActivity));
-      saveChats(dbSessions);
+      const merged = mergeSessions(all, dbSessions);
+      saveChats(merged);
+      setSessions([...merged].sort((a, b) => b.lastActivity - a.lastActivity));
     } else {
       // LocalStorage Fallback
-      const all = loadChats();
       setSessions([...all].sort((a, b) => b.lastActivity - a.lastActivity));
     }
   }, []);
@@ -1698,11 +1750,13 @@ function AdminChat() {
     chats[idx] = updated;
     saveChats(chats);
     setInput("");
-    refresh();
+    
+    // Instantly update state for seamless responsiveness
+    setSessions([...chats].sort((a, b) => b.lastActivity - a.lastActivity));
 
-    // Sync with database
-    await dbSaveChatMessage(msg, activeId);
-    await dbUpsertChatSession(updated);
+    // Sync with database asynchronously (no await)
+    dbSaveChatMessage(msg, activeId);
+    dbUpsertChatSession(updated);
   };
 
   const timeStr = (ts: number) => new Date(ts).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });

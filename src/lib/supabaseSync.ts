@@ -46,13 +46,6 @@ const getApiUrl = () => {
 
 export const isSupabaseConfigured = true;
 
-const SEED_PRODUCTS = [
-  { id: "1", name: "Sweater Rajut Pink Oversize", price: 85000, originalPrice: 320000, description: "Sweater rajut premium warna pink. Bahan lembut dan nyaman dipakai. Kondisi sangat terawat.", condition: "Sangat Baik", brand: "Unbranded", category: "Fashion Wanita", stock: 1, weight: "300g", material: "Rajut Akrilik", tags: ["sweater", "rajut", "pink"], status: "published", shopeeLink: "https://shopee.co.id/", photos: [], variants: [{ name: "Ukuran", options: ["M", "L"] }], createdAt: "2026-07-20" },
-  { id: "2", name: "Crop Top Stripe Monochrome", price: 65000, originalPrice: 220000, description: "Crop top motif stripe hitam-putih trendi. Bahan stretch nyaman.", condition: "Baik", brand: "H&M", category: "Fashion Wanita", stock: 1, weight: "200g", material: "Cotton Stretch", tags: ["crop top", "stripe"], status: "published", shopeeLink: "https://shopee.co.id/", photos: [], variants: [{ name: "Ukuran", options: ["S", "M"] }], createdAt: "2026-07-21" },
-  { id: "3", name: "Polo Crop Navy Premium", price: 75000, originalPrice: 280000, description: "Polo shirt crop warna navy elegan. Bahan berkualitas, terasa adem.", condition: "Sangat Baik", brand: "Uniqlo", category: "Fashion Wanita", stock: 1, weight: "250g", material: "Pique Cotton", tags: ["polo", "crop", "navy"], status: "published", shopeeLink: "https://shopee.co.id/", photos: [], variants: [{ name: "Ukuran", options: ["M"] }], createdAt: "2026-07-22" },
-  { id: "4", name: "Blouse Ruffle Putih Elegan", price: 110000, originalPrice: 430000, description: "Blouse detail ruffle feminin dan elegan. Warna putih bersih, bahan ringan.", condition: "Sangat Baik", brand: "Zara", category: "Fashion Wanita", stock: 1, weight: "220g", material: "Chiffon", tags: ["blouse", "ruffle", "elegan"], status: "published", shopeeLink: "https://shopee.co.id/", photos: [], variants: [{ name: "Ukuran", options: ["S", "M"] }], createdAt: "2026-07-23" },
-];
-
 async function fetchDocument() {
   try {
     const res = await fetch(getApiUrl(), {
@@ -100,14 +93,7 @@ async function queueWrite(operation: (doc: any) => any) {
 // ─── Products Sync ───────────────────────────────────────────────────────────
 export async function dbFetchProducts(): Promise<Product[] | null> {
   const doc = await fetchDocument();
-  if (!doc.products || doc.products.length === 0) {
-    await queueWrite((d) => {
-      d.products = SEED_PRODUCTS;
-      return d;
-    });
-    return SEED_PRODUCTS as Product[];
-  }
-  return doc.products as Product[];
+  return (doc.products || []) as Product[];
 }
 
 export async function dbSaveProduct(p: Product): Promise<boolean> {
