@@ -1,3 +1,5 @@
+import { supabase, isSupabaseConfigured } from './supabase';
+
 export interface Product {
   id: string;
   name: string;
@@ -33,8 +35,7 @@ export interface ChatSession {
   unreadByAdmin: number;
 }
 
-// Dynamically determine the endpoint. If localhost, call the deployed Vercel API proxy
-// to avoid CORS and lack of local serverless runner.
+// Fallback JSON-hosting API endpoint
 const getApiUrl = () => {
   if (typeof window !== 'undefined') {
     if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
@@ -43,8 +44,6 @@ const getApiUrl = () => {
   }
   return '/api/db';
 };
-
-export const isSupabaseConfigured = true;
 
 async function fetchDocument() {
   try {
@@ -79,7 +78,6 @@ async function saveDocument(doc: { products: any[]; chats: any[] }) {
   }
 }
 
-// Queue writes sequentially to avoid race conditions
 let writeQueue = Promise.resolve();
 async function queueWrite(operation: (doc: any) => any) {
   writeQueue = writeQueue.then(async () => {
@@ -92,11 +90,29 @@ async function queueWrite(operation: (doc: any) => any) {
 
 // ─── Products Sync ───────────────────────────────────────────────────────────
 export async function dbFetchProducts(): Promise<Product[] | null> {
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data, error } = await supabase.from('products').select('*');
+      if (!error && data) return data as Product[];
+      console.error("Supabase fetch products error:", error);
+    } catch (e) {
+      console.error(e);
+    }
+  }
   const doc = await fetchDocument();
   return (doc.products || []) as Product[];
 }
 
 export async function dbSaveProduct(p: Product): Promise<boolean> {
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { error } = await supabase.from('products').upsert(p);
+      if (!error) return true;
+      console.error("Supabase save product error:", error);
+    } catch (e) {
+      console.error(e);
+    }
+  }
   await queueWrite((doc) => {
     const prods = doc.products || [];
     const idx = prods.findIndex((x: any) => x.id === p.id);
@@ -112,6 +128,15 @@ export async function dbSaveProduct(p: Product): Promise<boolean> {
 }
 
 export async function dbDeleteProduct(id: string): Promise<boolean> {
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { error } = await supabase.from('products').delete().eq('id', id);
+      if (!error) return true;
+      console.error("Supabase delete product error:", error);
+    } catch (e) {
+      console.error(e);
+    }
+  }
   await queueWrite((doc) => {
     doc.products = (doc.products || []).filter((x: any) => x.id !== id);
     return doc;
@@ -121,11 +146,35 @@ export async function dbDeleteProduct(id: string): Promise<boolean> {
 
 // ─── Chats Sync ──────────────────────────────────────────────────────────────
 export async function dbFetchChats(): Promise<ChatSession[] | null> {
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data, error } = await supabase.from('chats').select('*');
+      if (!error && data) return data as ChatSession[];
+      console.error("Supabase fetch chats error:", error);
+    } catch (e) {
+      console.error(e);
+    }
+  }
   const doc = await fetchDocument();
   return (doc.chats || []) as ChatSession[];
 }
 
 export async function dbUpsertChatSession(sess: ChatSession): Promise<boolean> {
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { error } = await supabase.from('chats').upsert({
+        sessionId: sess.sessionId,
+        guestLabel: sess.guestLabel,
+        messages: sess.messages || [],
+        lastActivity: sess.lastActivity,
+        unreadByAdmin: sess.unreadByAdmin
+      });
+      if (!error) return true;
+      console.error("Supabase upsert chat session error:", error);
+    } catch (e) {
+      console.error(e);
+    }
+  }
   await queueWrite((doc) => {
     const chats = doc.chats || [];
     const idx = chats.findIndex((x: any) => x.sessionId === sess.sessionId);
@@ -146,6 +195,27 @@ export async function dbUpsertChatSession(sess: ChatSession): Promise<boolean> {
 }
 
 export async function dbSaveChatMessage(msg: ChatMsg, sessionId: string): Promise<boolean> {
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data, error: fetchErr } = await supabase.from('chats').select('messages').eq('sessionId', sessionId).single();
+      let msgs: ChatMsg[] = [];
+      if (!fetchErr && data) {
+        msgs = (data.messages as ChatMsg[]) || [];
+      }
+      if (!msgs.find((m) => m.id === msg.id)) {
+        msgs.push(msg);
+      }
+      const { error } = await supabase.from('chats').upsert({
+        sessionId,
+        messages: msgs,
+        lastActivity: Date.now()
+      });
+      if (!error) return true;
+      console.error("Supabase save chat message error:", error);
+    } catch (e) {
+      console.error(e);
+    }
+  }
   await queueWrite((doc) => {
     const chats = doc.chats || [];
     const idx = chats.findIndex((x: any) => x.sessionId === sessionId);
@@ -163,8 +233,23 @@ export async function dbSaveChatMessage(msg: ChatMsg, sessionId: string): Promis
   return true;
 }
 
-// Subscribe to realtime database changes for instant update (polling fallback)
+// Subscribe to realtime database changes for instant update
 export function dbSubscribeRealtime(table: string, onEvent: () => void) {
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const channel = supabase.channel(`public:${table}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table }, () => {
+          onEvent();
+        })
+        .subscribe();
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  
   const interval = setInterval(() => {
     onEvent();
   }, 4000);
