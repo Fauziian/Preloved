@@ -40,13 +40,15 @@ export default async function handler(req, res) {
     const redisClient = await getRedisClient();
 
     if (req.method === 'GET') {
-      const [prodRaw, chatRaw] = await Promise.all([
+      const [prodRaw, chatRaw, visitorRaw] = await Promise.all([
         redisClient.get('products'),
-        redisClient.get('chats')
+        redisClient.get('chats'),
+        redisClient.get('visitors')
       ]);
 
       let products = [];
       let chats = [];
+      let visitors = null;
 
       try {
         if (prodRaw) {
@@ -64,6 +66,14 @@ export default async function handler(req, res) {
         console.error("Error parsing chats:", e);
       }
 
+      try {
+        if (visitorRaw) {
+          visitors = JSON.parse(visitorRaw);
+        }
+      } catch (e) {
+        console.error("Error parsing visitors:", e);
+      }
+
       // Filter out chats older than 3 days
       const cleanedChats = filterOldChats(chats);
       if (cleanedChats.length !== chats.length) {
@@ -71,7 +81,7 @@ export default async function handler(req, res) {
         chats = cleanedChats;
       }
 
-      return res.status(200).json({ products, chats });
+      return res.status(200).json({ products, chats, visitors });
 
     } else if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
       const bodyData = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
@@ -83,6 +93,10 @@ export default async function handler(req, res) {
       if (bodyData && bodyData.chats !== undefined) {
         const cleanedChats = filterOldChats(bodyData.chats);
         await redisClient.set('chats', JSON.stringify(cleanedChats));
+      }
+
+      if (bodyData && bodyData.visitors !== undefined) {
+        await redisClient.set('visitors', JSON.stringify(bodyData.visitors));
       }
 
       return res.status(200).json({ status: 'success' });

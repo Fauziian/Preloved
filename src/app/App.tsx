@@ -21,11 +21,12 @@ import {
 import {
   recordVisit, recordProductView, loadVisitorData,
   getLast7Days, formatDateLabel, VisitorData,
+  detectDevice, detectReferrer
 } from "@/app/lib/tracker";
 import {
   dbFetchProducts, dbSaveProduct, dbDeleteProduct,
   dbFetchChats, dbUpsertChatSession, dbSaveChatMessage,
-  dbSubscribeRealtime
+  dbSubscribeRealtime, dbFetchVisitors, dbSaveVisitors
 } from "@/lib/supabaseSync";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -701,12 +702,23 @@ function Sidebar({ page, onNav, onLogout, mobileOpen, onMobileClose }: {
 }
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
-function AdminDashboard({ products, onNav }: { products: Product[]; onNav: (p: Page) => void }) {
-  const vd = loadVisitorData();
-  const week = getLast7Days();
+function AdminDashboard({ products, onNav, vd }: { products: Product[]; onNav: (p: Page) => void; vd: VisitorData }) {
+  const get7DaysFromState = (vdState: VisitorData): DailyVisit[] => {
+    const result: DailyVisit[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split("T")[0];
+      const found = (vdState.daily || []).find((x) => x.date === dateStr);
+      result.push(found ?? { date: dateStr, visits: 0, pageViews: 0 });
+    }
+    return result;
+  };
+
+  const week = get7DaysFromState(vd);
   const published = products.filter((p) => p.status === "published").length;
   const draft = products.filter((p) => p.status === "draft").length;
-  const topViewed = Object.entries(vd.productViews)
+  const topViewed = Object.entries(vd.productViews || {})
     .sort((a, b) => b[1] - a[1]).slice(0, 5)
     .map(([id, views]) => ({ id, views, prod: products.find((p) => p.id === id) }))
     .filter((x) => x.prod);
@@ -836,9 +848,20 @@ const getDeviceColor = (name: string) => {
 };
 
 // ─── Visitor Analytics ────────────────────────────────────────────────────────
-function AdminVisitors({ products }: { products: Product[] }) {
-  const [vd, setVd] = useState<VisitorData>(loadVisitorData);
-  const week = getLast7Days();
+function AdminVisitors({ products, vd, setVd }: { products: Product[]; vd: VisitorData; setVd: React.Dispatch<React.SetStateAction<VisitorData>> }) {
+  const get7DaysFromState = (vdState: VisitorData): DailyVisit[] => {
+    const result: DailyVisit[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split("T")[0];
+      const found = (vdState.daily || []).find((x) => x.date === dateStr);
+      result.push(found ?? { date: dateStr, visits: 0, pageViews: 0 });
+    }
+    return result;
+  };
+
+  const week = get7DaysFromState(vd);
   const chartData = week.map((d) => ({ name: formatDateLabel(d.date), Kunjungan: d.visits, "Page Views": d.pageViews }));
 
   const devicesObj: Record<string, number> = { Desktop: 0, Mobile: 0 };
@@ -848,18 +871,20 @@ function AdminVisitors({ products }: { products: Product[] }) {
   const deviceData = Object.entries(devicesObj).map(([name, value]) => ({ name, value }));
   const hasDeviceData = Object.values(devicesObj).some((val) => val > 0);
 
-  const refData = Object.entries(vd.referrers).sort((a, b) => b[1] - a[1]).map(([name, value]) => ({ name, value }));
-  const topProds = Object.entries(vd.productViews).sort((a, b) => b[1] - a[1]).slice(0, 5)
+  const refData = Object.entries(vd.referrers || {}).sort((a, b) => b[1] - a[1]).map(([name, value]) => ({ name, value }));
+  const topProds = Object.entries(vd.productViews || {}).sort((a, b) => b[1] - a[1]).slice(0, 5)
     .map(([id, views]) => ({ id, views, prod: products.find((p) => p.id === id) })).filter((x) => x.prod);
 
   const totalToday = week[week.length - 1]?.visits ?? 0;
   const totalThisWeek = week.reduce((s, d) => s + d.visits, 0);
 
-  const handleReset = () => {
+  const handleReset = async () => {
     if (confirm("Reset semua data pengunjung? Aksi ini tidak dapat dibatalkan.")) {
       const blank: VisitorData = { totalVisits: 0, totalPageViews: 0, daily: [], productViews: {}, referrers: {}, devices: {} };
-      localStorage.setItem("sherly_visitors", JSON.stringify(blank));
+      await dbSaveVisitors(blank);
+      sessionStorage.removeItem("sherly_session_counted_db");
       sessionStorage.removeItem("sherly_session_counted");
+      localStorage.setItem("sherly_visitors", JSON.stringify(blank));
       setVd(blank);
     }
   };
@@ -1333,6 +1358,86 @@ function ProductForm({ initial, onSave, onCancel }: { initial?: Product; onSave:
   );
 }
 
+async function syncVisitToDb() {
+  try {
+    const serverData = await dbFetchVisitors();
+    
+    // We only want to count a new session once per browser session
+    const SESSION_KEY = "sherly_session_counted_db";
+    const alreadyCountedDb = sessionStorage.getItem(SESSION_KEY);
+    
+    const data = serverData || {
+      totalVisits: 0,
+      totalPageViews: 0,
+      daily: [],
+      productViews: {},
+      referrers: {},
+      devices: {},
+    };
+    
+    if (!alreadyCountedDb) {
+      data.totalVisits = (data.totalVisits || 0) + 1;
+      sessionStorage.setItem(SESSION_KEY, "1");
+      
+      // Device
+      const dev = detectDevice();
+      data.devices = data.devices || {};
+      data.devices[dev] = (data.devices[dev] || 0) + 1;
+      
+      // Referrer
+      const ref = detectReferrer();
+      data.referrers = data.referrers || {};
+      data.referrers[ref] = (data.referrers[ref] || 0) + 1;
+    }
+    
+    // Always count page view
+    data.totalPageViews = (data.totalPageViews || 0) + 1;
+    
+    // Daily entry
+    const td = new Date().toISOString().split("T")[0];
+    data.daily = data.daily || [];
+    const existing = data.daily.find((d: any) => d.date === td);
+    if (existing) {
+      if (!alreadyCountedDb) existing.visits = (existing.visits || 0) + 1;
+      existing.pageViews = (existing.pageViews || 0) + 1;
+    } else {
+      data.daily.push({ date: td, visits: alreadyCountedDb ? 0 : 1, pageViews: 1 });
+    }
+    
+    // Keep last 30 days
+    data.daily = data.daily.slice(-30);
+    
+    await dbSaveVisitors(data);
+    
+    // Also update our local storage to match the server so they are in sync
+    localStorage.setItem("sherly_visitors", JSON.stringify(data));
+  } catch (err) {
+    console.error("Failed to sync visit to database:", err);
+  }
+}
+
+async function syncProductViewToDb(productId: string) {
+  try {
+    const serverData = await dbFetchVisitors();
+    const data = serverData || {
+      totalVisits: 0,
+      totalPageViews: 0,
+      daily: [],
+      productViews: {},
+      referrers: {},
+      devices: {},
+    };
+    data.productViews = data.productViews || {};
+    data.productViews[productId] = (data.productViews[productId] || 0) + 1;
+    await dbSaveVisitors(data);
+    
+    // Update local storage too
+    localStorage.setItem("sherly_visitors", JSON.stringify(data));
+  } catch (err) {
+    console.error("Failed to sync product view to database:", err);
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // ROOT APP
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1352,6 +1457,7 @@ export default function App() {
   const [products, setProducts] = useState<Product[]>(loadProds);
   const [detailProd, setDetailProd] = useState<Product | null>(null);
   const [editProd, setEditProd] = useState<Product | null>(null);
+  const [vd, setVd] = useState<VisitorData>(loadVisitorData);
 
   // Sync page state
   useEffect(() => {
@@ -1367,10 +1473,20 @@ export default function App() {
     }
   }, [adminLoggedIn]);
 
-  // Track visit on first load
-  useEffect(() => { recordVisit(); }, []);
+  // Track visit on first load and sync with db
+  useEffect(() => {
+    recordVisit();
+    syncVisitToDb().then(() => {
+      dbFetchVisitors().then((latest) => {
+        if (latest) {
+          setVd(latest);
+          localStorage.setItem("sherly_visitors", JSON.stringify(latest));
+        }
+      });
+    });
+  }, []);
 
-  // Fetch initial products from database on load
+  // Fetch initial products and visitor data from database on load
   useEffect(() => {
     async function initDb() {
       const dbProds = await dbFetchProducts();
@@ -1378,9 +1494,30 @@ export default function App() {
         setProducts(dbProds);
         saveProds(dbProds);
       }
+      const dbVisitors = await dbFetchVisitors();
+      if (dbVisitors) {
+        setVd(dbVisitors);
+        localStorage.setItem("sherly_visitors", JSON.stringify(dbVisitors));
+      }
     }
     initDb();
   }, []);
+
+  // Poll visitor data every 15 seconds if admin is logged in
+  useEffect(() => {
+    if (!adminLoggedIn) return;
+    const fetchLatest = () => {
+      dbFetchVisitors().then((latest) => {
+        if (latest) {
+          setVd(latest);
+          localStorage.setItem("sherly_visitors", JSON.stringify(latest));
+        }
+      });
+    };
+    fetchLatest();
+    const interval = setInterval(fetchLatest, 15000);
+    return () => clearInterval(interval);
+  }, [adminLoggedIn]);
 
   const nav = (p: Page) => {
     if (p.startsWith("admin") && !adminLoggedIn && p !== "admin-login") { setPage("admin-login"); return; }
@@ -1388,7 +1525,20 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const goDetail = (p: Product) => { setDetailProd(p); recordProductView(p.id); setPage("detail"); window.scrollTo({ top: 0 }); };
+  const goDetail = (p: Product) => {
+    setDetailProd(p);
+    recordProductView(p.id);
+    setPage("detail");
+    window.scrollTo({ top: 0 });
+    syncProductViewToDb(p.id).then(() => {
+      dbFetchVisitors().then((latest) => {
+        if (latest) {
+          setVd(latest);
+          localStorage.setItem("sherly_visitors", JSON.stringify(latest));
+        }
+      });
+    });
+  };
 
   const handleSave = async (p: Product) => {
     // Optimistic UI update with functional state to avoid closure bugs
@@ -1452,7 +1602,7 @@ export default function App() {
             onMobileClose={() => setMobileSidebar(false)}
           />
           <main className="flex-1 p-4 md:p-8 overflow-y-auto">
-            {page === "admin-dashboard" && <AdminDashboard products={products} onNav={nav} />}
+            {page === "admin-dashboard" && <AdminDashboard products={products} onNav={nav} vd={vd} />}
             {page === "admin-products" && (
               <AdminProducts products={products} onAdd={() => nav("admin-add")}
                 onEdit={(p) => { setEditProd(p); nav("admin-edit"); }}
@@ -1478,7 +1628,7 @@ export default function App() {
             )}
             {page === "admin-add" && <ProductForm onSave={handleSave} onCancel={() => nav("admin-products")} />}
             {page === "admin-edit" && editProd && <ProductForm initial={editProd} onSave={handleSave} onCancel={() => nav("admin-products")} />}
-            {page === "admin-visitors" && <AdminVisitors products={products} />}
+            {page === "admin-visitors" && <AdminVisitors products={products} vd={vd} setVd={setVd} />}
             {page === "admin-chat" && <AdminChat />}
           </main>
         </div>

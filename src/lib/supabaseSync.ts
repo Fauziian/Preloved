@@ -59,10 +59,10 @@ async function fetchDocument() {
   } catch (err) {
     console.error("Error reading from database:", err);
   }
-  return { products: [], chats: [] };
+  return { products: [], chats: [], visitors: null };
 }
 
-async function saveDocument(doc: { products: any[]; chats: any[] }) {
+async function saveDocument(doc: { products: any[]; chats: any[]; visitors?: any }) {
   try {
     const res = await fetch(getApiUrl(), {
       method: 'POST',
@@ -279,3 +279,36 @@ export function dbSubscribeRealtime(table: string, onEvent: () => void) {
     clearInterval(interval);
   };
 }
+
+// ─── Visitors Sync ───────────────────────────────────────────────────────────
+export async function dbFetchVisitors(): Promise<any | null> {
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data, error } = await supabase.from('visitors').select('*').single();
+      if (!error && data) return data;
+      console.error("Supabase fetch visitors error:", error);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  const doc = await fetchDocument();
+  return doc.visitors || null;
+}
+
+export async function dbSaveVisitors(visitors: any): Promise<boolean> {
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { error } = await supabase.from('visitors').upsert({ id: 'global', data: visitors });
+      if (!error) return true;
+      console.error("Supabase save visitors error:", error);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  await queueWrite((doc) => {
+    doc.visitors = visitors;
+    return doc;
+  });
+  return true;
+}
+

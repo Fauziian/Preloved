@@ -21,14 +21,14 @@ function today(): string {
   return new Date().toISOString().split("T")[0];
 }
 
-function detectDevice(): string {
+export function detectDevice(): string {
   const ua = navigator.userAgent;
   if (/tablet|ipad|playbook|silk/i.test(ua)) return "Tablet";
   if (/mobile|android|iphone|ipod|blackberry|opera mini|iemobile/i.test(ua)) return "Mobile";
   return "Desktop";
 }
 
-function detectReferrer(): string {
+export function detectReferrer(): string {
   const ref = document.referrer;
   if (!ref) return "Langsung";
   if (ref.includes("google")) return "Google";
