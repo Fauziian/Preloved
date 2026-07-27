@@ -14,7 +14,7 @@ import {
   Shield, Package, Plus, Pencil, Trash2,
   LayoutDashboard, LogOut, Eye, EyeOff, Upload,
   Check, AlertCircle, Filter, ArrowUpRight, ArrowRight,
-  Users, TrendingUp, Globe, Smartphone, Monitor,
+  Users, TrendingUp, Globe, Smartphone, Monitor, Tablet,
   ChevronDown, Activity, RefreshCw, Clock,
   Camera, CheckCircle2, Truck, MapPin, MessageCircle, Send,
 } from "lucide-react";
@@ -828,13 +828,26 @@ function AdminDashboard({ products, onNav }: { products: Product[]; onNav: (p: P
   );
 }
 
+const getDeviceColor = (name: string) => {
+  if (name === "Desktop") return "#ec4899"; // pink
+  if (name === "Mobile") return "#8b5cf6";  // violet / purple
+  if (name === "Tablet") return "#3b82f6";  // blue
+  return "#9ca3af";                         // fallback gray
+};
+
 // ─── Visitor Analytics ────────────────────────────────────────────────────────
 function AdminVisitors({ products }: { products: Product[] }) {
   const [vd, setVd] = useState<VisitorData>(loadVisitorData);
   const week = getLast7Days();
   const chartData = week.map((d) => ({ name: formatDateLabel(d.date), Kunjungan: d.visits, "Page Views": d.pageViews }));
 
-  const deviceData = Object.entries(vd.devices).map(([name, value]) => ({ name, value }));
+  const devicesObj: Record<string, number> = { Desktop: 0, Mobile: 0 };
+  Object.entries(vd.devices || {}).forEach(([name, value]) => {
+    devicesObj[name] = value;
+  });
+  const deviceData = Object.entries(devicesObj).map(([name, value]) => ({ name, value }));
+  const hasDeviceData = Object.values(devicesObj).some((val) => val > 0);
+
   const refData = Object.entries(vd.referrers).sort((a, b) => b[1] - a[1]).map(([name, value]) => ({ name, value }));
   const topProds = Object.entries(vd.productViews).sort((a, b) => b[1] - a[1]).slice(0, 5)
     .map(([id, views]) => ({ id, views, prod: products.find((p) => p.id === id) })).filter((x) => x.prod);
@@ -905,22 +918,34 @@ function AdminVisitors({ products }: { products: Product[] }) {
         <div className="bg-white rounded-2xl border border-pink-100 shadow-sm p-6">
           <h2 className="font-bold text-[#1a0a2e] mb-1 text-sm">Perangkat</h2>
           <p className="text-xs text-gray-400 mb-5">Jenis perangkat pengunjung</p>
-          {deviceData.length > 0 ? (
+          {hasDeviceData ? (
             <>
               <ResponsiveContainer width="100%" height={160}>
                 <PieChart>
                   <Pie data={deviceData} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={4} dataKey="value">
-                    {deviceData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                    {deviceData.map((d, i) => (
+                      <Cell key={i} fill={getDeviceColor(d.name)} />
+                    ))}
                   </Pie>
                   <Tooltip formatter={(v) => [v, "Pengunjung"]} contentStyle={{ borderRadius: "10px", fontSize: 12 }} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="space-y-2 mt-2">
-                {deviceData.map((d, i) => (
+                {deviceData.map((d) => (
                   <div key={d.name} className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2">
-                      <div className="w-2.5 h-2.5 rounded-full" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
-                      <span className="font-medium text-gray-600">{d.name === "Desktop" ? <><Monitor size={11} className="inline mr-1" />Desktop</> : d.name === "Mobile" ? <><Smartphone size={11} className="inline mr-1" />Mobile</> : d.name}</span>
+                      <div className="w-2.5 h-2.5 rounded-full" style={{ background: getDeviceColor(d.name) }} />
+                      <span className="font-medium text-gray-600">
+                        {d.name === "Desktop" ? (
+                          <><Monitor size={11} className="inline mr-1" />Desktop</>
+                        ) : d.name === "Mobile" ? (
+                          <><Smartphone size={11} className="inline mr-1" />Mobile</>
+                        ) : d.name === "Tablet" ? (
+                          <><Tablet size={11} className="inline mr-1" />Tablet</>
+                        ) : (
+                          d.name
+                        )}
+                      </span>
                     </div>
                     <span className="font-bold text-[#1a0a2e]">{d.value}</span>
                   </div>
