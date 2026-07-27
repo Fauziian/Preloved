@@ -162,10 +162,22 @@ export async function dbFetchChats(): Promise<ChatSession[] | null> {
 export async function dbUpsertChatSession(sess: ChatSession): Promise<boolean> {
   if (isSupabaseConfigured && supabase) {
     try {
+      // First, fetch the existing session if it exists to merge messages
+      const { data, error: fetchErr } = await supabase.from('chats').select('*').eq('sessionId', sess.sessionId).single();
+      let msgs = sess.messages || [];
+      if (!fetchErr && data && data.messages) {
+        const existingMsgs = data.messages as ChatMsg[];
+        msgs = [...existingMsgs];
+        (sess.messages || []).forEach((m) => {
+          if (!msgs.find((x) => x.id === m.id)) {
+            msgs.push(m);
+          }
+        });
+      }
       const { error } = await supabase.from('chats').upsert({
         sessionId: sess.sessionId,
         guestLabel: sess.guestLabel,
-        messages: sess.messages || [],
+        messages: msgs,
         lastActivity: sess.lastActivity,
         unreadByAdmin: sess.unreadByAdmin
       });
@@ -197,18 +209,27 @@ export async function dbUpsertChatSession(sess: ChatSession): Promise<boolean> {
 export async function dbSaveChatMessage(msg: ChatMsg, sessionId: string): Promise<boolean> {
   if (isSupabaseConfigured && supabase) {
     try {
-      const { data, error: fetchErr } = await supabase.from('chats').select('messages').eq('sessionId', sessionId).single();
+      const { data, error: fetchErr } = await supabase.from('chats').select('*').eq('sessionId', sessionId).single();
       let msgs: ChatMsg[] = [];
+      let guestLabel = `Guest #${sessionId.slice(-4)}`;
+      let unreadByAdmin = 0;
       if (!fetchErr && data) {
         msgs = (data.messages as ChatMsg[]) || [];
+        guestLabel = data.guestLabel || guestLabel;
+        unreadByAdmin = data.unreadByAdmin || 0;
       }
       if (!msgs.find((m) => m.id === msg.id)) {
         msgs.push(msg);
       }
+      if (msg.from === 'guest') {
+        unreadByAdmin += 1;
+      }
       const { error } = await supabase.from('chats').upsert({
         sessionId,
+        guestLabel,
         messages: msgs,
-        lastActivity: Date.now()
+        lastActivity: Date.now(),
+        unreadByAdmin
       });
       if (!error) return true;
       console.error("Supabase save chat message error:", error);
