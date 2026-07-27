@@ -29,7 +29,7 @@ interface Product {
   id: string; name: string; price: number; originalPrice: number;
   description: string; condition: string; brand: string; category: string;
   stock: number; weight: string; material: string; tags: string[];
-  status: "published" | "draft"; shopeeLink: string; photos: string[];
+  status: "published" | "draft" | "sold-out"; shopeeLink: string; photos: string[];
   variants: Variant[]; createdAt: string;
 }
 type Page = "catalog" | "detail" | "about" | "admin-login" | "admin-dashboard" | "admin-products" | "admin-add" | "admin-edit" | "admin-visitors" | "admin-chat";
@@ -144,7 +144,7 @@ function Navbar({ onNav, page }: { onNav: (p: Page) => void; page: Page }) {
 
 function ProductCard({ p, onClick }: { p: Product; onClick: () => void }) {
   const d = disc(p.originalPrice, p.price);
-  const soldOut = p.stock === 0;
+  const soldOut = p.status === "sold-out" || p.stock === 0;
   return (
     <div onClick={onClick} className={`group bg-white rounded-2xl overflow-hidden border transition-all duration-300 cursor-pointer ${soldOut ? "border-gray-200 opacity-80" : "border-pink-100 hover:border-pink-300 hover:shadow-2xl hover:shadow-pink-100"}`}>
       <div className="relative overflow-hidden bg-pink-50 aspect-[3/4]">
@@ -249,15 +249,15 @@ function ProductDetail({ p, onBack }: { p: Product; onBack: () => void }) {
               <span className="text-xs font-semibold text-violet-600 bg-violet-50 px-3 py-1 rounded-full">{p.category}</span>
               {p.brand && <span className="text-xs font-semibold text-pink-600 bg-pink-50 px-3 py-1 rounded-full">{p.brand}</span>}
               <span className={`text-xs font-semibold px-3 py-1 rounded-full ${p.condition === "Sangat Baik" || p.condition === "Baru" ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"}`}>{p.condition}</span>
-              {p.stock === 0 && (
+            {(p.status === "sold-out" || p.stock === 0) && (
                 <span className="text-xs font-bold px-3 py-1 rounded-full bg-gray-800 text-white tracking-wide italic">Barang Habis</span>
               )}
             </div>
             <h1 className="text-2xl font-extrabold text-[#1a0a2e] leading-tight" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>{p.name}</h1>
           </div>
           <div>
-            <p className={`text-3xl font-extrabold ${p.stock === 0 ? "text-gray-400 line-through" : "text-pink-600"}`}>{fmt(p.price)}</p>
-            {p.stock > 0 && p.originalPrice > p.price && <p className="text-base text-gray-400 line-through mt-0.5">{fmt(p.originalPrice)}</p>}
+            <p className={`text-3xl font-extrabold ${(p.status === "sold-out" || p.stock === 0) ? "text-gray-400 line-through" : "text-pink-600"}`}>{fmt(p.price)}</p>
+            {!(p.status === "sold-out" || p.stock === 0) && p.originalPrice > p.price && <p className="text-base text-gray-400 line-through mt-0.5">{fmt(p.originalPrice)}</p>}
           </div>
           {p.variants.map((v) => (
             <div key={v.name}>
@@ -277,7 +277,7 @@ function ProductDetail({ p, onBack }: { p: Product; onBack: () => void }) {
           </div>
           {p.description && <div><p className="text-sm font-semibold text-[#1a0a2e] mb-2">Deskripsi</p><p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">{p.description}</p></div>}
           {p.tags.length > 0 && <div className="flex flex-wrap gap-2">{p.tags.map((t) => <span key={t} className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">#{t}</span>)}</div>}
-          {p.stock === 0 ? (
+          {(p.status === "sold-out" || p.stock === 0) ? (
             <div className="flex flex-col items-center gap-2 w-full py-4 bg-gray-100 rounded-2xl text-center">
               <span className="text-lg font-extrabold text-gray-500 italic tracking-wide">Sold Out</span>
               <p className="text-xs text-gray-400">Stok sudah habis · Barang tidak tersedia</p>
@@ -305,7 +305,7 @@ function CatalogPage({ products, onDetail }: { products: Product[]; onDetail: (p
   const [cond, setCond] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
   const [showFilter, setShowFilter] = useState(false);
-  const pub = products.filter((p) => p.status === "published");
+  const pub = products.filter((p) => p.status === "published" || p.status === "sold-out");
   const filtered = pub.filter((p) => {
     const q = search.toLowerCase();
     return (!q || p.name.toLowerCase().includes(q) || p.brand.toLowerCase().includes(q) || p.tags.some((t) => t.includes(q)))
@@ -978,10 +978,10 @@ function AdminProducts({ products, onAdd, onEdit, onDelete, onToggle }: {
                 {p.originalPrice > p.price && <p className="text-xs text-gray-400 line-through">{fmt(p.originalPrice)}</p>}
               </div>
               <button onClick={() => onToggle(p.id)} className={`text-xs font-bold px-3 py-1.5 rounded-full transition-all ${
-                p.stock === 0 ? "bg-gray-200 text-gray-600 cursor-default" :
+                (p.status === "sold-out" || p.stock === 0) ? "bg-gray-200 text-gray-600" :
                 p.status === "published" ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-amber-100 text-amber-700 hover:bg-amber-200"
               }`}>
-                {p.stock === 0 ? "✗ Habis" : p.status === "published" ? "✓ Aktif" : "○ Draft"}
+                {(p.status === "sold-out" || p.stock === 0) ? "✕ Habis" : p.status === "published" ? "✓ Aktif" : "○ Draft"}
               </button>
               <div className="flex items-center gap-1.5">
                 <button onClick={() => onEdit(p)} title="Edit" className="w-8 h-8 rounded-lg bg-violet-50 hover:bg-violet-100 flex items-center justify-center transition-colors"><Pencil size={14} className="text-violet-600" /></button>
@@ -1139,13 +1139,22 @@ function ProductForm({ initial, onSave, onCancel }: { initial?: Product; onSave:
         <div className="bg-white rounded-2xl border border-pink-100 p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
             <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2 block">Status Produk</label>
-            <div className="flex gap-2">
-              {(["published", "draft"] as const).map((s) => (
-                <button key={s} type="button" onClick={() => up("status", s)}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${form.status === s ? (s === "published" ? "bg-green-500 text-white shadow-sm" : "bg-amber-500 text-white shadow-sm") : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>
-                  {s === "published" ? "✓ Aktif — Tampil di Katalog" : "○ Draft — Tersembunyi"}
-                </button>
-              ))}
+            <div className="flex flex-wrap gap-2">
+              {/* Aktif */}
+              <button key="published" type="button" onClick={() => up("status", "published")}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${form.status === "published" ? "bg-green-500 text-white shadow-sm" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>
+                ✓ Aktif — Tampil di Katalog
+              </button>
+              {/* Draft */}
+              <button key="draft" type="button" onClick={() => up("status", "draft")}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${form.status === "draft" ? "bg-amber-500 text-white shadow-sm" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>
+                ○ Draft — Tersembunyi
+              </button>
+              {/* Sold Out */}
+              <button key="sold-out" type="button" onClick={() => up("status", "sold-out")}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${form.status === "sold-out" ? "bg-gray-800 text-white shadow-sm" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>
+                ✕ Habis / Sold Out
+              </button>
             </div>
           </div>
           <div className="flex gap-3 w-full md:w-auto">
