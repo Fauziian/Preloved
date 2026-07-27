@@ -22,6 +22,11 @@ import {
   recordVisit, recordProductView, loadVisitorData,
   getLast7Days, formatDateLabel, VisitorData,
 } from "@/app/lib/tracker";
+import {
+  dbFetchProducts, dbSaveProduct, dbDeleteProduct,
+  dbFetchChats, dbUpsertChatSession, dbSaveChatMessage,
+  dbSubscribeRealtime
+} from "@/lib/supabaseSync";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Variant { name: string; options: string[] }
@@ -1249,7 +1254,28 @@ export default function App() {
 
   // Track visit on first load
   useEffect(() => { recordVisit(); }, []);
-  useEffect(() => { saveProds(products); }, [products]);
+
+  // Fetch initial products from Supabase and set up real-time subscription
+  useEffect(() => {
+    async function initDb() {
+      const dbProds = await dbFetchProducts();
+      if (dbProds) {
+        setProducts(dbProds);
+        saveProds(dbProds);
+      }
+    }
+    initDb();
+
+    // Subscribe to realtime product changes
+    const unsub = dbSubscribeRealtime("products", async () => {
+      const dbProds = await dbFetchProducts();
+      if (dbProds) {
+        setProducts(dbProds);
+        saveProds(dbProds);
+      }
+    });
+    return unsub;
+  }, []);
 
   const nav = (p: Page) => {
     if (p.startsWith("admin") && !adminLoggedIn && p !== "admin-login") { setPage("admin-login"); return; }
@@ -1259,8 +1285,13 @@ export default function App() {
 
   const goDetail = (p: Product) => { setDetailProd(p); recordProductView(p.id); setPage("detail"); window.scrollTo({ top: 0 }); };
 
-  const handleSave = (p: Product) => {
+  const handleSave = async (p: Product) => {
+    // Optimistic UI update
     setProducts((prev) => prev.find((x) => x.id === p.id) ? prev.map((x) => x.id === p.id ? p : x) : [...prev, p]);
+    saveProds(products.find((x) => x.id === p.id) ? products.map((x) => x.id === p.id ? p : x) : [...products, p]);
+    
+    // Save to database
+    await dbSaveProduct(p as any);
     nav("admin-products"); setEditProd(null);
   };
 
@@ -1317,8 +1348,25 @@ export default function App() {
             {page === "admin-products" && (
               <AdminProducts products={products} onAdd={() => nav("admin-add")}
                 onEdit={(p) => { setEditProd(p); nav("admin-edit"); }}
-                onDelete={(id) => setProducts((prev) => prev.filter((p) => p.id !== id))}
-                onToggle={(id) => setProducts((prev) => prev.map((p) => p.id === id ? { ...p, status: p.status === "published" ? "draft" : "published" } : p))} />
+                onDelete={async (id) => {
+                  setProducts((prev) => prev.filter((p) => p.id !== id));
+                  saveProds(products.filter((p) => p.id !== id));
+                  await dbDeleteProduct(id);
+                }}
+                onToggle={async (id) => {
+                  let targetProd: Product | null = null;
+                  setProducts((prev) => prev.map((p) => {
+                    if (p.id === id) {
+                      targetProd = { ...p, status: p.status === "published" ? "draft" : "published" };
+                      return targetProd;
+                    }
+                    return p;
+                  }));
+                  if (targetProd) {
+                    saveProds(products.map((p) => p.id === id ? { ...p, status: p.status === "published" ? "draft" : "published" } : p));
+                    await dbSaveProduct(targetProd as any);
+                  }
+                }} />
             )}
             {page === "admin-add" && <ProductForm onSave={handleSave} onCancel={() => nav("admin-products")} />}
             {page === "admin-edit" && editProd && <ProductForm initial={editProd} onSave={handleSave} onCancel={() => nav("admin-products")} />}
@@ -1350,6 +1398,7 @@ function GuestChatWidget() {
   const [session, setSession] = useState<ChatSession | null>(null);
   const [msgs, setMsgs] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState("");
+  const [guestName, setGuestName] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const [hasNewAdmin, setHasNewAdmin] = useState(false);
 
@@ -1360,10 +1409,21 @@ function GuestChatWidget() {
     setMsgs(s.messages);
   }, []);
 
-  // Poll for admin replies every 2s
-  useEffect(() => {
+  // Sync messages with Supabase (real-time + fallback)
+  const refresh = useCallback(async () => {
     if (!session) return;
-    const t = setInterval(() => {
+    const dbSessions = await dbFetchChats();
+    if (dbSessions) {
+      const updated = dbSessions.find((c) => c.sessionId === session.sessionId);
+      if (updated) {
+        const prevLen = msgs.length;
+        setMsgs(updated.messages);
+        if (updated.messages.length > prevLen && updated.messages[updated.messages.length - 1]?.from === "admin") {
+          setHasNewAdmin(true);
+        }
+      }
+    } else {
+      // LocalStorage Fallback
       const chats = loadChats();
       const updated = chats.find((c) => c.sessionId === session.sessionId);
       if (updated) {
@@ -1373,9 +1433,23 @@ function GuestChatWidget() {
           setHasNewAdmin(true);
         }
       }
-    }, 2000);
-    return () => clearInterval(t);
+    }
   }, [session, msgs.length]);
+
+  useEffect(() => {
+    if (!session) return;
+    refresh();
+
+    // Subscribe to realtime database chat_messages changes
+    const unsub = dbSubscribeRealtime("chat_messages", refresh);
+    
+    // Slow backup polling
+    const t = setInterval(refresh, 4000);
+    return () => {
+      unsub();
+      clearInterval(t);
+    };
+  }, [session, refresh]);
 
   // Auto scroll
   useEffect(() => {
@@ -1385,92 +1459,159 @@ function GuestChatWidget() {
   // Clear notification when opened
   useEffect(() => { if (open) setHasNewAdmin(false); }, [open]);
 
-  const send = () => {
+  const send = async () => {
     if (!input.trim() || !session) return;
     const msg: ChatMsg = { id: uid(), from: "guest", text: input.trim(), ts: Date.now() };
+    
+    // Update locally
     const chats = loadChats();
     const idx = chats.findIndex((c) => c.sessionId === session.sessionId);
     const newMsgs = [...(idx >= 0 ? chats[idx].messages : []), msg];
-    const updated: ChatSession = { ...(idx >= 0 ? chats[idx] : session), messages: newMsgs, lastActivity: Date.now(), unreadByAdmin: (idx >= 0 ? chats[idx].unreadByAdmin : 0) + 1 };
+    const updated: ChatSession = { 
+      ...(idx >= 0 ? chats[idx] : session), 
+      messages: newMsgs, 
+      lastActivity: Date.now(), 
+      unreadByAdmin: (idx >= 0 ? chats[idx].unreadByAdmin : 0) + 1 
+    };
     if (idx >= 0) chats[idx] = updated; else chats.push(updated);
     saveChats(chats);
     setMsgs(newMsgs);
     setInput("");
+
+    // Sync with database
+    await dbSaveChatMessage(msg, session.sessionId);
+    await dbUpsertChatSession(updated);
+  };
+
+  const submitName = async () => {
+    if (!guestName.trim() || !session) return;
+    const cleanName = guestName.trim();
+    const updated: ChatSession = { ...session, guestLabel: cleanName, lastActivity: Date.now() };
+    
+    setSession(updated);
+    
+    const chats = loadChats();
+    const idx = chats.findIndex((c) => c.sessionId === session.sessionId);
+    if (idx >= 0) chats[idx] = updated; else chats.push(updated);
+    saveChats(chats);
+
+    // Sync with database
+    await dbUpsertChatSession(updated);
   };
 
   const timeStr = (ts: number) => new Date(ts).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
 
+  const isGuestDefault = !session || session.guestLabel.startsWith("Guest #");
+
   return (
     <>
       {open && (
-        <div className="fixed bottom-24 right-6 z-50 w-[340px] rounded-2xl shadow-2xl border border-pink-100 overflow-hidden flex flex-col" style={{ maxHeight: "520px" }}>
-          {/* Header */}
-          <div className="bg-gradient-to-r from-pink-500 to-violet-600 px-4 py-3 flex items-center gap-3 shrink-0">
-            <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center">
-              <Sparkles size={16} className="text-white" />
-            </div>
-            <div className="flex-1">
-              <p className="text-white font-bold text-sm">SherlyPreloved</p>
-              <p className="text-white/70 text-[11px] flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-300 inline-block" />
-                Online · siap membantu
-              </p>
-            </div>
-            <button onClick={() => setOpen(false)} className="text-white/70 hover:text-white transition-colors"><X size={18} /></button>
-          </div>
+        <div className="fixed bottom-24 right-6 z-50 w-[340px] rounded-2xl shadow-2xl border border-pink-100 overflow-hidden flex flex-col bg-white" style={{ maxHeight: "520px" }}>
+          {isGuestDefault ? (
+            /* Prompt Name Screen */
+            <>
+              <div className="bg-gradient-to-r from-pink-500 to-violet-600 px-4 py-4 flex items-center gap-3 shrink-0">
+                <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
+                  <Sparkles size={16} className="text-white" />
+                </div>
+                <div className="flex-1 text-left">
+                  <p className="text-white font-bold text-sm">Mulai Chat</p>
+                  <p className="text-white/80 text-[11px]">Silakan masukkan nama Anda</p>
+                </div>
+                <button onClick={() => setOpen(false)} className="text-white/70 hover:text-white transition-colors"><X size={18} /></button>
+              </div>
+              <div className="flex-1 p-6 flex flex-col justify-center gap-4 bg-[#fdf7fb]">
+                <div className="space-y-2 text-left">
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wide block">Nama Lengkap</label>
+                  <input
+                    type="text"
+                    required
+                    value={guestName}
+                    onChange={(e) => setGuestName(e.target.value)}
+                    placeholder="Cth: Rifqi Fauzi"
+                    className="w-full px-4 py-3 bg-white border border-pink-200 rounded-xl text-sm outline-none focus:border-pink-400 transition-colors"
+                    onKeyDown={(e) => e.key === "Enter" && submitName()}
+                  />
+                </div>
+                <button
+                  onClick={submitName}
+                  disabled={!guestName.trim()}
+                  className="w-full py-3 bg-gradient-to-r from-pink-500 to-violet-600 text-white font-bold rounded-xl transition-all hover:shadow-lg hover:shadow-pink-200 disabled:opacity-60 text-sm"
+                >
+                  Mulai Percakapan
+                </button>
+              </div>
+            </>
+          ) : (
+            /* Chat Interface */
+            <>
+              {/* Header */}
+              <div className="bg-gradient-to-r from-pink-500 to-violet-600 px-4 py-3 flex items-center gap-3 shrink-0">
+                <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center">
+                  <Sparkles size={16} className="text-white" />
+                </div>
+                <div className="flex-1 text-left">
+                  <p className="text-white font-bold text-sm">SherlyPreloved</p>
+                  <p className="text-white/70 text-[11px] flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-300 inline-block" />
+                    Online · siap membantu
+                  </p>
+                </div>
+                <button onClick={() => setOpen(false)} className="text-white/70 hover:text-white transition-colors"><X size={18} /></button>
+              </div>
 
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto bg-[#f7f0fb] px-4 py-3 space-y-3" style={{ minHeight: 0 }}>
-            {/* Welcome bubble */}
-            <div className="flex gap-2 items-end">
-              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-pink-400 to-violet-500 flex items-center justify-center shrink-0">
-                <Sparkles size={10} className="text-white" />
-              </div>
-              <div className="bg-white rounded-2xl rounded-bl-sm px-3 py-2 shadow-sm max-w-[80%]">
-                <p className="text-xs text-[#1a0a2e] leading-relaxed">Halo! Selamat datang di <span className="font-semibold text-pink-500">SherlyPreloved</span>. Ada yang ingin kamu tanyakan tentang produk kami?</p>
-                <p className="text-[10px] text-gray-400 mt-0.5 text-right">Admin</p>
-              </div>
-            </div>
-            {msgs.map((m) => (
-              <div key={m.id} className={`flex gap-2 items-end ${m.from === "guest" ? "flex-row-reverse" : ""}`}>
-                {m.from === "admin" && (
+              {/* Messages */}
+              <div className="flex-1 overflow-y-auto bg-[#f7f0fb] px-4 py-3 space-y-3" style={{ minHeight: 0 }}>
+                {/* Welcome bubble */}
+                <div className="flex gap-2 items-end">
                   <div className="w-6 h-6 rounded-full bg-gradient-to-br from-pink-400 to-violet-500 flex items-center justify-center shrink-0">
                     <Sparkles size={10} className="text-white" />
                   </div>
-                )}
-                <div className={`rounded-2xl px-3 py-2 shadow-sm max-w-[78%] ${m.from === "guest" ? "bg-gradient-to-br from-pink-500 to-violet-600 text-white rounded-br-sm" : "bg-white text-[#1a0a2e] rounded-bl-sm"}`}>
-                  <p className="text-xs leading-relaxed">{m.text}</p>
-                  <p className={`text-[10px] mt-0.5 ${m.from === "guest" ? "text-white/60 text-right" : "text-gray-400 text-right"}`}>{timeStr(m.ts)}</p>
+                  <div className="bg-white rounded-2xl rounded-bl-sm px-3 py-2 shadow-sm max-w-[80%] text-left">
+                    <p className="text-xs text-[#1a0a2e] leading-relaxed">Halo! Selamat datang di <span className="font-semibold text-pink-500">SherlyPreloved</span>. Ada yang ingin kamu tanyakan tentang produk kami?</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5 text-right">Admin</p>
+                  </div>
                 </div>
+                {msgs.map((m) => (
+                  <div key={m.id} className={`flex gap-2 items-end ${m.from === "guest" ? "flex-row-reverse" : ""}`}>
+                    {m.from === "admin" && (
+                      <div className="w-6 h-6 rounded-full bg-gradient-to-br from-pink-400 to-violet-500 flex items-center justify-center shrink-0">
+                        <Sparkles size={10} className="text-white" />
+                      </div>
+                    )}
+                    <div className={`rounded-2xl px-3 py-2 shadow-sm max-w-[78%] text-left ${m.from === "guest" ? "bg-gradient-to-br from-pink-500 to-violet-600 text-white rounded-br-sm" : "bg-white text-[#1a0a2e] rounded-bl-sm"}`}>
+                      <p className="text-xs leading-relaxed">{m.text}</p>
+                      <p className={`text-[10px] mt-0.5 ${m.from === "guest" ? "text-white/60 text-right" : "text-gray-400 text-right"}`}>{timeStr(m.ts)}</p>
+                    </div>
+                  </div>
+                ))}
+                <div ref={bottomRef} />
               </div>
-            ))}
-            <div ref={bottomRef} />
-          </div>
 
-          {/* Identity label */}
-          {session && (
-            <div className="bg-white/80 border-t border-pink-100 px-4 py-1 text-[10px] text-gray-400 text-center">
-              Anda terhubung sebagai <span className="font-semibold text-pink-400">{session.guestLabel}</span>
-            </div>
+              {/* Identity label */}
+              <div className="bg-white/80 border-t border-pink-100 px-4 py-1 text-[10px] text-gray-400 text-center">
+                Anda terhubung sebagai <span className="font-semibold text-pink-400">{session.guestLabel}</span>
+              </div>
+
+              {/* Input */}
+              <div className="bg-white border-t border-pink-100 px-3 py-3 flex gap-2 shrink-0">
+                <input
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
+                  placeholder="Tulis pesan..."
+                  className="flex-1 text-sm bg-[#fdf7fb] border border-pink-200 rounded-xl px-3 py-2 outline-none focus:border-pink-400 transition-colors"
+                />
+                <button
+                  onClick={send}
+                  disabled={!input.trim()}
+                  className="w-9 h-9 bg-gradient-to-br from-pink-500 to-violet-600 rounded-xl flex items-center justify-center disabled:opacity-40 hover:shadow-md transition-all shrink-0"
+                >
+                  <Send size={15} className="text-white" />
+                </button>
+              </div>
+            </>
           )}
-
-          {/* Input */}
-          <div className="bg-white border-t border-pink-100 px-3 py-3 flex gap-2 shrink-0">
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
-              placeholder="Tulis pesan..."
-              className="flex-1 text-sm bg-[#fdf7fb] border border-pink-200 rounded-xl px-3 py-2 outline-none focus:border-pink-400 transition-colors"
-            />
-            <button
-              onClick={send}
-              disabled={!input.trim()}
-              className="w-9 h-9 bg-gradient-to-br from-pink-500 to-violet-600 rounded-xl flex items-center justify-center disabled:opacity-40 hover:shadow-md transition-all shrink-0"
-            >
-              <Send size={15} className="text-white" />
-            </button>
-          </div>
         </div>
       )}
 
@@ -1496,15 +1637,32 @@ function AdminChat() {
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const refresh = useCallback(() => {
-    const all = loadChats();
-    setSessions([...all].sort((a, b) => b.lastActivity - a.lastActivity));
+  const refresh = useCallback(async () => {
+    const dbSessions = await dbFetchChats();
+    if (dbSessions) {
+      setSessions([...dbSessions].sort((a, b) => b.lastActivity - a.lastActivity));
+      saveChats(dbSessions);
+    } else {
+      // LocalStorage Fallback
+      const all = loadChats();
+      setSessions([...all].sort((a, b) => b.lastActivity - a.lastActivity));
+    }
   }, []);
 
   useEffect(() => {
     refresh();
-    const t = setInterval(refresh, 2000);
-    return () => clearInterval(t);
+
+    // Subscribe to realtime database changes for chat_sessions and chat_messages
+    const unsubSessions = dbSubscribeRealtime("chat_sessions", refresh);
+    const unsubMessages = dbSubscribeRealtime("chat_messages", refresh);
+
+    // Backup polling
+    const t = setInterval(refresh, 4000);
+    return () => {
+      unsubSessions();
+      unsubMessages();
+      clearInterval(t);
+    };
   }, [refresh]);
 
   const active = sessions.find((s) => s.sessionId === activeId) ?? null;
@@ -1512,27 +1670,39 @@ function AdminChat() {
   // Mark read when opening a session
   useEffect(() => {
     if (!activeId) return;
-    const chats = loadChats();
-    const idx = chats.findIndex((c) => c.sessionId === activeId);
-    if (idx >= 0 && chats[idx].unreadByAdmin > 0) {
-      chats[idx] = { ...chats[idx], unreadByAdmin: 0 };
-      saveChats(chats);
-      refresh();
+    async function markRead() {
+      const chats = loadChats();
+      const idx = chats.findIndex((c) => c.sessionId === activeId);
+      if (idx >= 0 && chats[idx].unreadByAdmin > 0) {
+        const updated = { ...chats[idx], unreadByAdmin: 0 };
+        chats[idx] = updated;
+        saveChats(chats);
+        refresh();
+        await dbUpsertChatSession(updated);
+      }
     }
+    markRead();
   }, [activeId, refresh]);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [active?.messages.length]);
 
-  const send = () => {
+  const send = async () => {
     if (!input.trim() || !activeId) return;
     const msg: ChatMsg = { id: uid(), from: "admin", text: input.trim(), ts: Date.now() };
+    
+    // Update locally
     const chats = loadChats();
     const idx = chats.findIndex((c) => c.sessionId === activeId);
     if (idx < 0) return;
-    chats[idx] = { ...chats[idx], messages: [...chats[idx].messages, msg], lastActivity: Date.now() };
+    const updated = { ...chats[idx], messages: [...chats[idx].messages, msg], lastActivity: Date.now() };
+    chats[idx] = updated;
     saveChats(chats);
     setInput("");
     refresh();
+
+    // Sync with database
+    await dbSaveChatMessage(msg, activeId);
+    await dbUpsertChatSession(updated);
   };
 
   const timeStr = (ts: number) => new Date(ts).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
