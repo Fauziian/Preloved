@@ -144,31 +144,56 @@ function Navbar({ onNav, page }: { onNav: (p: Page) => void; page: Page }) {
 
 function ProductCard({ p, onClick }: { p: Product; onClick: () => void }) {
   const d = disc(p.originalPrice, p.price);
+  const soldOut = p.stock === 0;
   return (
-    <div onClick={onClick} className="group bg-white rounded-2xl overflow-hidden border border-pink-100 hover:border-pink-300 hover:shadow-2xl hover:shadow-pink-100 transition-all duration-300 cursor-pointer">
+    <div onClick={onClick} className={`group bg-white rounded-2xl overflow-hidden border transition-all duration-300 cursor-pointer ${soldOut ? "border-gray-200 opacity-80" : "border-pink-100 hover:border-pink-300 hover:shadow-2xl hover:shadow-pink-100"}`}>
       <div className="relative overflow-hidden bg-pink-50 aspect-[3/4]">
-        <Photo src={p.photos[0]} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-        {d > 0 && <div className="absolute top-3 left-3 bg-gradient-to-r from-pink-500 to-rose-500 text-white text-[11px] font-bold px-2.5 py-1 rounded-full">-{d}%</div>}
-        <div className="absolute top-3 right-3">
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${p.condition === "Sangat Baik" || p.condition === "Baru" ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"}`}>{p.condition}</span>
-        </div>
-        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end">
-          <div className="w-full px-4 pb-4">
-            <div className="bg-white/95 backdrop-blur-sm text-pink-600 font-bold text-sm py-2.5 rounded-xl text-center flex items-center justify-center gap-2">
-              <Eye size={14} /> Lihat Detail
+        <Photo src={p.photos[0]} alt={p.name} className={`w-full h-full object-cover transition-transform duration-500 ${soldOut ? "grayscale" : "group-hover:scale-105"}`} />
+        {/* Sold Out diagonal overlay */}
+        {soldOut && (
+          <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.35)" }}>
+            <span
+              className="text-white font-extrabold tracking-widest select-none"
+              style={{
+                fontSize: "clamp(22px, 6vw, 36px)",
+                fontStyle: "italic",
+                transform: "rotate(-30deg)",
+                textShadow: "0 2px 12px rgba(0,0,0,0.6)",
+                letterSpacing: "0.12em",
+                whiteSpace: "nowrap",
+                textTransform: "uppercase",
+              }}
+            >
+              Sold Out
+            </span>
+          </div>
+        )}
+        {!soldOut && d > 0 && <div className="absolute top-3 left-3 bg-gradient-to-r from-pink-500 to-rose-500 text-white text-[11px] font-bold px-2.5 py-1 rounded-full">-{d}%</div>}
+        {!soldOut && (
+          <div className="absolute top-3 right-3">
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${p.condition === "Sangat Baik" || p.condition === "Baru" ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"}`}>{p.condition}</span>
+          </div>
+        )}
+        {!soldOut && (
+          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end">
+            <div className="w-full px-4 pb-4">
+              <div className="bg-white/95 backdrop-blur-sm text-pink-600 font-bold text-sm py-2.5 rounded-xl text-center flex items-center justify-center gap-2">
+                <Eye size={14} /> Lihat Detail
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
       <div className="p-4 space-y-2">
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="text-[10px] font-semibold text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full">{p.category}</span>
           {p.brand && p.brand !== "Unbranded" && <span className="text-[10px] font-semibold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-full">{p.brand}</span>}
+          {soldOut && <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">Habis</span>}
         </div>
-        <h3 className="font-semibold text-sm text-[#1a0a2e] leading-snug line-clamp-2">{p.name}</h3>
+        <h3 className={`font-semibold text-sm leading-snug line-clamp-2 ${soldOut ? "text-gray-400" : "text-[#1a0a2e]"}`}>{p.name}</h3>
         <div>
-          <p className="text-base font-extrabold text-pink-600">{fmt(p.price)}</p>
-          {p.originalPrice > p.price && <p className="text-xs text-gray-400 line-through">{fmt(p.originalPrice)}</p>}
+          <p className={`text-base font-extrabold ${soldOut ? "text-gray-400 line-through" : "text-pink-600"}`}>{fmt(p.price)}</p>
+          {!soldOut && p.originalPrice > p.price && <p className="text-xs text-gray-400 line-through">{fmt(p.originalPrice)}</p>}
         </div>
       </div>
     </div>
@@ -187,14 +212,32 @@ function ProductDetail({ p, onBack }: { p: Product; onBack: () => void }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
         <div className="space-y-4">
           <div className="relative rounded-3xl overflow-hidden bg-pink-50 aspect-square">
-            <Photo src={p.photos[activePhoto]} alt={p.name} className="w-full h-full object-cover" />
-            {d > 0 && <div className="absolute top-5 left-5 bg-gradient-to-r from-pink-500 to-rose-500 text-white font-bold px-3 py-1.5 rounded-full text-sm shadow-lg">HEMAT {d}%</div>}
+            <Photo src={p.photos[activePhoto]} alt={p.name} className={`w-full h-full object-cover ${p.stock === 0 ? "grayscale" : ""}`} />
+            {p.stock === 0 && (
+              <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.38)" }}>
+                <span
+                  className="text-white font-extrabold tracking-widest select-none"
+                  style={{
+                    fontSize: "clamp(30px, 5vw, 56px)",
+                    fontStyle: "italic",
+                    transform: "rotate(-30deg)",
+                    textShadow: "0 3px 18px rgba(0,0,0,0.7)",
+                    letterSpacing: "0.14em",
+                    whiteSpace: "nowrap",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Sold Out
+                </span>
+              </div>
+            )}
+            {p.stock > 0 && d > 0 && <div className="absolute top-5 left-5 bg-gradient-to-r from-pink-500 to-rose-500 text-white font-bold px-3 py-1.5 rounded-full text-sm shadow-lg">HEMAT {d}%</div>}
           </div>
           {p.photos.length > 1 && (
             <div className="flex gap-3 overflow-x-auto pb-1">
               {p.photos.map((ph, i) => (
                 <button key={i} onClick={() => setActivePhoto(i)} className={`flex-shrink-0 w-20 h-20 rounded-xl overflow-hidden border-2 transition-all ${activePhoto === i ? "border-pink-500 shadow-md" : "border-transparent opacity-60 hover:opacity-100"}`}>
-                  <Photo src={ph} alt="" className="w-full h-full object-cover" />
+                  <Photo src={ph} alt="" className={`w-full h-full object-cover ${p.stock === 0 ? "grayscale" : ""}`} />
                 </button>
               ))}
             </div>
@@ -206,12 +249,15 @@ function ProductDetail({ p, onBack }: { p: Product; onBack: () => void }) {
               <span className="text-xs font-semibold text-violet-600 bg-violet-50 px-3 py-1 rounded-full">{p.category}</span>
               {p.brand && <span className="text-xs font-semibold text-pink-600 bg-pink-50 px-3 py-1 rounded-full">{p.brand}</span>}
               <span className={`text-xs font-semibold px-3 py-1 rounded-full ${p.condition === "Sangat Baik" || p.condition === "Baru" ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"}`}>{p.condition}</span>
+              {p.stock === 0 && (
+                <span className="text-xs font-bold px-3 py-1 rounded-full bg-gray-800 text-white tracking-wide italic">Barang Habis</span>
+              )}
             </div>
             <h1 className="text-2xl font-extrabold text-[#1a0a2e] leading-tight" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>{p.name}</h1>
           </div>
           <div>
-            <p className="text-3xl font-extrabold text-pink-600">{fmt(p.price)}</p>
-            {p.originalPrice > p.price && <p className="text-base text-gray-400 line-through mt-0.5">{fmt(p.originalPrice)}</p>}
+            <p className={`text-3xl font-extrabold ${p.stock === 0 ? "text-gray-400 line-through" : "text-pink-600"}`}>{fmt(p.price)}</p>
+            {p.stock > 0 && p.originalPrice > p.price && <p className="text-base text-gray-400 line-through mt-0.5">{fmt(p.originalPrice)}</p>}
           </div>
           {p.variants.map((v) => (
             <div key={v.name}>
@@ -231,7 +277,12 @@ function ProductDetail({ p, onBack }: { p: Product; onBack: () => void }) {
           </div>
           {p.description && <div><p className="text-sm font-semibold text-[#1a0a2e] mb-2">Deskripsi</p><p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">{p.description}</p></div>}
           {p.tags.length > 0 && <div className="flex flex-wrap gap-2">{p.tags.map((t) => <span key={t} className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">#{t}</span>)}</div>}
-          {p.shopeeLink ? (
+          {p.stock === 0 ? (
+            <div className="flex flex-col items-center gap-2 w-full py-4 bg-gray-100 rounded-2xl text-center">
+              <span className="text-lg font-extrabold text-gray-500 italic tracking-wide">Sold Out</span>
+              <p className="text-xs text-gray-400">Stok sudah habis · Barang tidak tersedia</p>
+            </div>
+          ) : p.shopeeLink ? (
             <a href={p.shopeeLink} target="_blank" rel="noopener noreferrer"
               className="flex items-center justify-center gap-3 w-full py-4 bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 text-white font-extrabold rounded-2xl text-base transition-all hover:shadow-xl hover:shadow-orange-200 active:scale-[0.98]">
               <ShoppingBag size={20} /> Beli di Shopee <ExternalLink size={16} />
@@ -608,7 +659,7 @@ function AdminDashboard({ products, onNav }: { products: Product[]; onNav: (p: P
           { label: "Total Kunjungan", value: vd.totalVisits.toLocaleString("id-ID"), icon: <Users size={20} className="text-pink-600" />, sub: "pengunjung unik", bg: "bg-pink-50", trend: "+12%" },
           { label: "Page Views", value: vd.totalPageViews.toLocaleString("id-ID"), icon: <Eye size={20} className="text-violet-600" />, sub: "total halaman dilihat", bg: "bg-violet-50", trend: "+8%" },
           { label: "Produk Aktif", value: published, icon: <Package size={20} className="text-green-600" />, sub: `dari ${products.length} produk`, bg: "bg-green-50", trend: "" },
-          { label: "Draft", value: draft, icon: <AlertCircle size={20} className="text-amber-600" />, sub: "belum dipublish", bg: "bg-amber-50", trend: "" },
+          { label: "Stok Habis", value: products.filter((p) => p.stock === 0).length, icon: <AlertCircle size={20} className="text-red-500" />, sub: "perlu restock", bg: "bg-red-50", trend: "" },
         ].map((s) => (
           <div key={s.label} className="bg-white rounded-2xl p-5 border border-pink-100 shadow-sm">
             <div className={`w-10 h-10 ${s.bg} rounded-xl flex items-center justify-center mb-3`}>{s.icon}</div>
@@ -926,8 +977,11 @@ function AdminProducts({ products, onAdd, onEdit, onDelete, onToggle }: {
                 <p className="text-sm font-bold text-pink-600">{fmt(p.price)}</p>
                 {p.originalPrice > p.price && <p className="text-xs text-gray-400 line-through">{fmt(p.originalPrice)}</p>}
               </div>
-              <button onClick={() => onToggle(p.id)} className={`text-xs font-bold px-3 py-1.5 rounded-full transition-all ${p.status === "published" ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-amber-100 text-amber-700 hover:bg-amber-200"}`}>
-                {p.status === "published" ? "✓ Aktif" : "○ Draft"}
+              <button onClick={() => onToggle(p.id)} className={`text-xs font-bold px-3 py-1.5 rounded-full transition-all ${
+                p.stock === 0 ? "bg-gray-200 text-gray-600 cursor-default" :
+                p.status === "published" ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-amber-100 text-amber-700 hover:bg-amber-200"
+              }`}>
+                {p.stock === 0 ? "✗ Habis" : p.status === "published" ? "✓ Aktif" : "○ Draft"}
               </button>
               <div className="flex items-center gap-1.5">
                 <button onClick={() => onEdit(p)} title="Edit" className="w-8 h-8 rounded-lg bg-violet-50 hover:bg-violet-100 flex items-center justify-center transition-colors"><Pencil size={14} className="text-violet-600" /></button>
