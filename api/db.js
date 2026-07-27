@@ -1,3 +1,18 @@
+import { createClient } from 'redis';
+
+let client;
+
+async function getRedisClient() {
+  if (!client) {
+    client = createClient({
+      url: process.env.REDIS_URL
+    });
+    client.on('error', (err) => console.error('Redis Client Error', err));
+    await client.connect();
+  }
+  return client;
+}
+
 export default async function handler(req, res) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -8,13 +23,11 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  const KV_URL = process.env.KV_REST_API_URL;
-  const KV_TOKEN = process.env.KV_REST_API_TOKEN;
+  const REDIS_URL = process.env.REDIS_URL;
 
-  // If Vercel KV is not connected yet, fall back to a public mock/in-memory warning
-  if (!KV_URL || !KV_TOKEN) {
+  if (!REDIS_URL) {
     return res.status(500).json({ 
-      error: 'Vercel KV is not connected. Please go to Vercel dashboard -> Storage tab, create a KV database, and connect it to this project.' 
+      error: 'Redis database is not connected. Please make sure REDIS_URL environment variable is present.' 
     });
   }
 
@@ -24,29 +37,28 @@ export default async function handler(req, res) {
   };
 
   try {
-    if (req.method === 'GET') {
-      const [prodRes, chatRes] = await Promise.all([
-        fetch(`${KV_URL}/get/products`, { headers: { Authorization: `Bearer ${KV_TOKEN}` } }),
-        fetch(`${KV_URL}/get/chats`, { headers: { Authorization: `Bearer ${KV_TOKEN}` } })
-      ]);
+    const redisClient = await getRedisClient();
 
-      const prodData = prodRes.ok ? await prodRes.json() : { result: null };
-      const chatData = chatRes.ok ? await chatRes.json() : { result: null };
+    if (req.method === 'GET') {
+      const [prodRaw, chatRaw] = await Promise.all([
+        redisClient.get('products'),
+        redisClient.get('chats')
+      ]);
 
       let products = [];
       let chats = [];
 
       try {
-        if (prodData.result) {
-          products = JSON.parse(prodData.result);
+        if (prodRaw) {
+          products = JSON.parse(prodRaw);
         }
       } catch (e) {
         console.error("Error parsing products:", e);
       }
 
       try {
-        if (chatData.result) {
-          chats = JSON.parse(chatData.result);
+        if (chatRaw) {
+          chats = JSON.parse(chatRaw);
         }
       } catch (e) {
         console.error("Error parsing chats:", e);
@@ -55,11 +67,7 @@ export default async function handler(req, res) {
       // Filter out chats older than 3 days
       const cleanedChats = filterOldChats(chats);
       if (cleanedChats.length !== chats.length) {
-        await fetch(`${KV_URL}/set/chats`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${KV_TOKEN}` },
-          body: JSON.stringify(JSON.stringify(cleanedChats))
-        });
+        await redisClient.set('chats', JSON.stringify(cleanedChats));
         chats = cleanedChats;
       }
 
@@ -67,35 +75,22 @@ export default async function handler(req, res) {
 
     } else if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
       const bodyData = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-      const promises = [];
-
+      
       if (bodyData && bodyData.products !== undefined) {
-        promises.push(
-          fetch(`${KV_URL}/set/products`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${KV_TOKEN}` },
-            body: JSON.stringify(JSON.stringify(bodyData.products))
-          })
-        );
+        await redisClient.set('products', JSON.stringify(bodyData.products));
       }
 
       if (bodyData && bodyData.chats !== undefined) {
         const cleanedChats = filterOldChats(bodyData.chats);
-        promises.push(
-          fetch(`${KV_URL}/set/chats`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${KV_TOKEN}` },
-            body: JSON.stringify(JSON.stringify(cleanedChats))
-          })
-        );
+        await redisClient.set('chats', JSON.stringify(cleanedChats));
       }
 
-      await Promise.all(promises);
       return res.status(200).json({ status: 'success' });
     } else {
       return res.status(405).json({ error: 'Method not allowed' });
     }
   } catch (err) {
+    console.error("Redis Handler Error:", err);
     return res.status(500).json({ error: err.message });
   }
 }
