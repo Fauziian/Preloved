@@ -581,7 +581,10 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
   );
 }
 
-function Sidebar({ page, onNav, onLogout }: { page: Page; onNav: (p: Page) => void; onLogout: () => void }) {
+function Sidebar({ page, onNav, onLogout, mobileOpen, onMobileClose }: {
+  page: Page; onNav: (p: Page) => void; onLogout: () => void;
+  mobileOpen?: boolean; onMobileClose?: () => void;
+}) {
   const [unread, setUnread] = useState(0);
   useEffect(() => {
     const calc = () => setUnread(loadChats().reduce((s, c) => s + c.unreadByAdmin, 0));
@@ -597,27 +600,36 @@ function Sidebar({ page, onNav, onLogout }: { page: Page; onNav: (p: Page) => vo
     ["Chat Tamu", <MessageCircle size={18} />, "admin-chat", unread],
   ];
   const isActive = (p: Page) => page === p || (p === "admin-products" && (page === "admin-add" || page === "admin-edit"));
-  return (
-    <aside className="w-60 bg-white border-r border-pink-100 flex flex-col min-h-full">
-      <div className="p-5 border-b border-pink-100">
+
+  const handleNav = (p: Page) => { onNav(p); onMobileClose?.(); };
+
+  const sidebarContent = (
+    <aside className="w-64 bg-white border-r border-pink-100 flex flex-col h-full">
+      <div className="p-5 border-b border-pink-100 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-pink-500 to-violet-600 flex items-center justify-center"><Sparkles size={14} className="text-white" /></div>
           <span className="font-extrabold text-sm text-[#1a0a2e]" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>SherlyPreloved</span>
         </div>
-        <div className="mt-2 ml-10">
-          <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full uppercase tracking-wide">Admin</span>
-        </div>
+        {/* Close button (mobile only) */}
+        {onMobileClose && (
+          <button onClick={onMobileClose} className="md:hidden w-8 h-8 flex items-center justify-center rounded-lg hover:bg-pink-50 transition-colors">
+            <X size={18} className="text-gray-500" />
+          </button>
+        )}
+      </div>
+      <div className="mt-2 px-5 pb-2">
+        <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full uppercase tracking-wide">Admin</span>
       </div>
       <nav className="flex-1 p-4 space-y-1">
         {items.map(([label, icon, p, badge]) => (
-          <button key={p} onClick={() => onNav(p)} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${isActive(p) ? "bg-gradient-to-r from-pink-500 to-violet-600 text-white shadow-sm" : "text-gray-600 hover:bg-pink-50 hover:text-pink-600"}`}>
+          <button key={p} onClick={() => handleNav(p)} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${isActive(p) ? "bg-gradient-to-r from-pink-500 to-violet-600 text-white shadow-sm" : "text-gray-600 hover:bg-pink-50 hover:text-pink-600"}`}>
             {icon} {label}
             {badge > 0 && <span className="ml-auto bg-pink-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">{badge > 9 ? "9+" : badge}</span>}
           </button>
         ))}
       </nav>
       <div className="p-4 border-t border-pink-100 space-y-2">
-        <button onClick={() => onNav("catalog")} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-gray-500 hover:bg-violet-50 hover:text-violet-600 transition-all">
+        <button onClick={() => handleNav("catalog")} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-gray-500 hover:bg-violet-50 hover:text-violet-600 transition-all">
           <Globe size={18} /> Lihat Website
         </button>
         <button onClick={onLogout} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-gray-500 hover:bg-red-50 hover:text-red-500 transition-all">
@@ -625,6 +637,26 @@ function Sidebar({ page, onNav, onLogout }: { page: Page; onNav: (p: Page) => vo
         </button>
       </div>
     </aside>
+  );
+
+  return (
+    <>
+      {/* Desktop: always visible */}
+      <div className="hidden md:flex md:flex-col md:w-64 flex-shrink-0 min-h-screen">
+        {sidebarContent}
+      </div>
+      {/* Mobile: overlay drawer */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 md:hidden flex">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onMobileClose} />
+          {/* Drawer */}
+          <div className="relative z-10 h-full flex flex-col shadow-2xl">
+            {sidebarContent}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -1200,27 +1232,66 @@ export default function App() {
 
   const isAdmin = page.startsWith("admin") && page !== "admin-login";
 
+  const [mobileSidebar, setMobileSidebar] = useState(false);
+
   if (page === "admin-login") {
     return <AdminLogin onLogin={() => { setAdminLoggedIn(true); setPage("admin-dashboard"); }} />;
   }
 
+  // Page label for mobile header
+  const pageLabels: Partial<Record<Page, string>> = {
+    "admin-dashboard": "Dashboard",
+    "admin-products": "Produk",
+    "admin-add": "Tambah Produk",
+    "admin-edit": "Edit Produk",
+    "admin-visitors": "Pengunjung",
+    "admin-chat": "Chat Tamu",
+  };
+
   if (isAdmin) {
     return (
-      <div className="min-h-screen bg-[#fdf7fb] flex" style={{ fontFamily: "'Poppins',sans-serif" }}>
-        <Sidebar page={page} onNav={nav} onLogout={() => { setAdminLoggedIn(false); nav("catalog"); }} />
-        <main className="flex-1 p-8 overflow-y-auto min-h-screen">
-          {page === "admin-dashboard" && <AdminDashboard products={products} onNav={nav} />}
-          {page === "admin-products" && (
-            <AdminProducts products={products} onAdd={() => nav("admin-add")}
-              onEdit={(p) => { setEditProd(p); nav("admin-edit"); }}
-              onDelete={(id) => setProducts((prev) => prev.filter((p) => p.id !== id))}
-              onToggle={(id) => setProducts((prev) => prev.map((p) => p.id === id ? { ...p, status: p.status === "published" ? "draft" : "published" } : p))} />
-          )}
-          {page === "admin-add" && <ProductForm onSave={handleSave} onCancel={() => nav("admin-products")} />}
-          {page === "admin-edit" && editProd && <ProductForm initial={editProd} onSave={handleSave} onCancel={() => nav("admin-products")} />}
-          {page === "admin-visitors" && <AdminVisitors products={products} />}
-          {page === "admin-chat" && <AdminChat />}
-        </main>
+      <div className="min-h-screen bg-[#fdf7fb] flex flex-col" style={{ fontFamily: "'Poppins',sans-serif" }}>
+        {/* Mobile top bar */}
+        <div className="md:hidden flex items-center gap-3 px-4 py-3 bg-white border-b border-pink-100 sticky top-0 z-40 shadow-sm">
+          <button
+            onClick={() => setMobileSidebar(true)}
+            className="w-9 h-9 rounded-xl bg-gradient-to-br from-pink-500 to-violet-600 flex items-center justify-center shadow-md"
+          >
+            <Menu size={18} className="text-white" />
+          </button>
+          <div className="flex items-center gap-2 flex-1">
+            <span className="font-extrabold text-sm text-[#1a0a2e]" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
+              Sherly<span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-violet-600">Preloved</span>
+            </span>
+            <span className="text-xs text-gray-400">·</span>
+            <span className="text-xs font-semibold text-gray-500">{pageLabels[page] ?? "Admin"}</span>
+          </div>
+          <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Admin</span>
+        </div>
+
+        {/* Body */}
+        <div className="flex flex-1 overflow-hidden">
+          <Sidebar
+            page={page}
+            onNav={nav}
+            onLogout={() => { setAdminLoggedIn(false); nav("catalog"); }}
+            mobileOpen={mobileSidebar}
+            onMobileClose={() => setMobileSidebar(false)}
+          />
+          <main className="flex-1 p-4 md:p-8 overflow-y-auto">
+            {page === "admin-dashboard" && <AdminDashboard products={products} onNav={nav} />}
+            {page === "admin-products" && (
+              <AdminProducts products={products} onAdd={() => nav("admin-add")}
+                onEdit={(p) => { setEditProd(p); nav("admin-edit"); }}
+                onDelete={(id) => setProducts((prev) => prev.filter((p) => p.id !== id))}
+                onToggle={(id) => setProducts((prev) => prev.map((p) => p.id === id ? { ...p, status: p.status === "published" ? "draft" : "published" } : p))} />
+            )}
+            {page === "admin-add" && <ProductForm onSave={handleSave} onCancel={() => nav("admin-products")} />}
+            {page === "admin-edit" && editProd && <ProductForm initial={editProd} onSave={handleSave} onCancel={() => nav("admin-products")} />}
+            {page === "admin-visitors" && <AdminVisitors products={products} />}
+            {page === "admin-chat" && <AdminChat />}
+          </main>
+        </div>
       </div>
     );
   }
