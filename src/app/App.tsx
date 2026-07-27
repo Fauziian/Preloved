@@ -172,7 +172,7 @@ function Navbar({ onNav, page }: { onNav: (p: Page) => void; page: Page }) {
           {([["Katalog", "catalog"], ["Tentang", "about"]] as [string, Page][]).map(([l, p]) => (
             <button key={p} onClick={() => onNav(p)} className={`text-sm font-semibold transition-colors ${page === p ? "text-pink-600" : "text-gray-500 hover:text-pink-500"}`}>{l}</button>
           ))}
-          <a href="https://shopee.co.id/" target="_blank" rel="noopener noreferrer"
+          <a href="https://s.shopee.co.id/gOm3vwsWI?share_channel_code=1" target="_blank" rel="noopener noreferrer"
             className="flex items-center gap-1.5 bg-gradient-to-r from-orange-400 to-orange-500 text-white text-sm font-bold px-4 py-2 rounded-full hover:shadow-md hover:shadow-orange-200 transition-all">
             <ShoppingBag size={14} /> Shopee Kami
           </a>
@@ -186,7 +186,7 @@ function Navbar({ onNav, page }: { onNav: (p: Page) => void; page: Page }) {
           {([["Katalog", "catalog"], ["Tentang", "about"]] as [string, Page][]).map(([l, p]) => (
             <button key={p} onClick={() => { onNav(p); setOpen(false); }} className="text-sm font-semibold text-gray-700 text-left">{l}</button>
           ))}
-          <a href="https://shopee.co.id/" target="_blank" rel="noopener noreferrer"
+          <a href="https://s.shopee.co.id/gOm3vwsWI?share_channel_code=1" target="_blank" rel="noopener noreferrer"
             className="flex items-center gap-2 bg-orange-400 text-white text-sm font-bold px-4 py-2.5 rounded-full w-fit"><ShoppingBag size={14} /> Shopee Kami</a>
         </div>
       )}
@@ -381,7 +381,7 @@ function CatalogPage({ products, onDetail }: { products: Product[]; onDetail: (p
           <p className="text-lg text-gray-500 max-w-xl mx-auto mb-8 leading-relaxed">Barang pilihan, kondisi terawat, foto asli, dan langsung bisa dibeli melalui Shopee.</p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <a href="#katalog" className="inline-flex items-center gap-2 bg-gradient-to-r from-pink-500 to-violet-600 text-white font-bold px-7 py-3.5 rounded-full hover:shadow-xl hover:shadow-pink-200 transition-all"><Tag size={16} /> Lihat Koleksi</a>
-            <a href="https://shopee.co.id/" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 bg-gradient-to-r from-orange-400 to-orange-500 text-white font-bold px-7 py-3.5 rounded-full hover:shadow-xl hover:shadow-orange-200 transition-all"><ShoppingBag size={16} /> Belanja di Shopee</a>
+            <a href="https://s.shopee.co.id/gOm3vwsWI?share_channel_code=1" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 bg-gradient-to-r from-orange-400 to-orange-500 text-white font-bold px-7 py-3.5 rounded-full hover:shadow-xl hover:shadow-orange-200 transition-all"><ShoppingBag size={16} /> Belanja di Shopee</a>
           </div>
         </div>
         <div className="max-w-3xl mx-auto px-5 mt-14 grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -522,8 +522,8 @@ function AboutPage() {
       <div className="bg-gradient-to-r from-pink-500 to-violet-600 rounded-3xl p-8 text-center text-white space-y-4">
         <h2 className="text-2xl font-extrabold" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>Hubungi Kami</h2>
         <div className="flex flex-wrap justify-center gap-3">
-          <a href="https://shopee.co.id/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white font-semibold px-5 py-2.5 rounded-full text-sm transition-all"><ShoppingBag size={14} /> Shopee</a>
-          <a href="https://instagram.com/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white font-semibold px-5 py-2.5 rounded-full text-sm transition-all"><Instagram size={14} /> Instagram</a>
+          <a href="https://s.shopee.co.id/gOm3vwsWI?share_channel_code=1" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white font-semibold px-5 py-2.5 rounded-full text-sm transition-all"><ShoppingBag size={14} /> Shopee</a>
+          <a href="https://www.instagram.com/shrlyagg/?utm_source=ig_web_button_share_sheet" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white font-semibold px-5 py-2.5 rounded-full text-sm transition-all"><Instagram size={14} /> Instagram</a>
         </div>
       </div>
     </div>
@@ -541,8 +541,8 @@ function Footer({ onNav }: { onNav: (p: Page) => void }) {
           </div>
           <p className="text-sm text-white/50 leading-relaxed">Official preloved store dengan koleksi pilihan berkualitas. Beli langsung via Shopee.</p>
           <div className="flex gap-3 pt-1">
-            <a href="https://shopee.co.id/" target="_blank" rel="noopener noreferrer" className="w-9 h-9 rounded-full bg-white/10 hover:bg-orange-500 flex items-center justify-center transition-colors"><ShoppingBag size={15} /></a>
-            <a href="https://instagram.com/" target="_blank" rel="noopener noreferrer" className="w-9 h-9 rounded-full bg-white/10 hover:bg-pink-600 flex items-center justify-center transition-colors"><Instagram size={15} /></a>
+            <a href="https://s.shopee.co.id/gOm3vwsWI?share_channel_code=1" target="_blank" rel="noopener noreferrer" className="w-9 h-9 rounded-full bg-white/10 hover:bg-orange-500 flex items-center justify-center transition-colors"><ShoppingBag size={15} /></a>
+            <a href="https://www.instagram.com/shrlyagg/?utm_source=ig_web_button_share_sheet" target="_blank" rel="noopener noreferrer" className="w-9 h-9 rounded-full bg-white/10 hover:bg-pink-600 flex items-center justify-center transition-colors"><Instagram size={15} /></a>
           </div>
         </div>
         <div>
@@ -551,7 +551,7 @@ function Footer({ onNav }: { onNav: (p: Page) => void }) {
             {([["Katalog Produk", "catalog"], ["Tentang Toko", "about"]] as [string, Page][]).map(([l, p]) => (
               <li key={p}><button onClick={() => onNav(p)} className="text-sm text-white/50 hover:text-white transition-colors">{l}</button></li>
             ))}
-            <li><a href="https://shopee.co.id/" target="_blank" rel="noopener noreferrer" className="text-sm text-white/50 hover:text-orange-400 transition-colors flex items-center gap-1">Shopee <ExternalLink size={10} /></a></li>
+            <li><a href="https://s.shopee.co.id/gOm3vwsWI?share_channel_code=1" target="_blank" rel="noopener noreferrer" className="text-sm text-white/50 hover:text-orange-400 transition-colors flex items-center gap-1">Shopee <ExternalLink size={10} /></a></li>
           </ul>
         </div>
         <div>
