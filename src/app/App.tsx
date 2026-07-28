@@ -547,12 +547,49 @@ function ProductDetail({ p, onBack }: { p: Product; onBack: () => void }) {
   );
 }
 
+function getPageNumbers(current: number, total: number) {
+  const pages: (number | string)[] = [];
+  if (total <= 6) {
+    for (let i = 1; i <= total; i++) pages.push(i);
+  } else {
+    pages.push(1);
+    if (current <= 3) {
+      pages.push(2);
+      pages.push(3);
+      pages.push(4);
+      pages.push("...");
+      pages.push(total);
+    } else if (current >= total - 2) {
+      pages.push("...");
+      pages.push(total - 3);
+      pages.push(total - 2);
+      pages.push(total - 1);
+      pages.push(total);
+    } else {
+      pages.push("...");
+      pages.push(current - 1);
+      pages.push(current);
+      pages.push(current + 1);
+      pages.push("...");
+      pages.push(total);
+    }
+  }
+  return pages;
+}
+
 function CatalogPage({ products, onDetail }: { products: Product[]; onDetail: (p: Product) => void }) {
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState("Semua");
   const [cond, setCond] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
   const [showFilter, setShowFilter] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, cat, cond, maxPrice]);
+
   const pub = products.filter((p) => p.status === "published" || p.status === "sold-out");
   const filtered = pub.filter((p) => {
     const q = search.toLowerCase();
@@ -561,6 +598,18 @@ function CatalogPage({ products, onDetail }: { products: Product[]; onDetail: (p
       && (!cond || p.condition === cond)
       && (!maxPrice || p.price <= parseInt(maxPrice));
   });
+
+  const usePagination = filtered.length > 10;
+  const itemsPerPage = 8;
+  const totalPages = usePagination ? Math.ceil(filtered.length / itemsPerPage) : 1;
+
+  const paginatedProducts = usePagination
+    ? filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+    : filtered;
+
+  const startIdx = usePagination ? (currentPage - 1) * itemsPerPage + 1 : 1;
+  const endIdx = usePagination ? Math.min(currentPage * itemsPerPage, filtered.length) : filtered.length;
+
   return (
     <>
       {/* ── NATURE LUXURY HERO ── */}
@@ -651,9 +700,70 @@ function CatalogPage({ products, onDetail }: { products: Product[]; onDetail: (p
         </div>
         <p className="text-sm text-gray-400 mb-6">{filtered.length} produk ditemukan</p>
         {filtered.length > 0 ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-            {filtered.map((p) => <ProductCard key={p.id} p={p} onClick={() => onDetail(p)} />)}
-          </div>
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+              {paginatedProducts.map((p) => <ProductCard key={p.id} p={p} onClick={() => onDetail(p)} />)}
+            </div>
+
+            {/* Pagination Controls */}
+            {usePagination && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-12 pt-8 border-t border-emerald-100/50">
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <button
+                    disabled={currentPage === 1}
+                    onClick={() => {
+                      setCurrentPage(prev => Math.max(prev - 1, 1));
+                      document.getElementById("katalog")?.scrollIntoView({ behavior: "smooth" });
+                    }}
+                    className="px-4 py-2 border border-emerald-100 rounded-xl text-sm font-semibold text-gray-700 bg-white hover:bg-emerald-50 disabled:opacity-40 disabled:hover:bg-white transition-all flex items-center gap-1"
+                  >
+                    <ChevronLeft size={16} /> Sebelumnya
+                  </button>
+
+                  {getPageNumbers(currentPage, totalPages).map((p, idx) => {
+                    if (p === "...") {
+                      return (
+                        <span key={`dots-${idx}`} className="text-gray-400 font-medium w-8 h-10 flex items-center justify-center">
+                          ...
+                        </span>
+                      );
+                    }
+                    return (
+                      <button
+                        key={`page-${p}`}
+                        onClick={() => {
+                          setCurrentPage(p as number);
+                          document.getElementById("katalog")?.scrollIntoView({ behavior: "smooth" });
+                        }}
+                        className={`w-10 h-10 rounded-xl font-bold transition-all flex items-center justify-center ${
+                          currentPage === p
+                            ? "bg-emerald-600 text-white shadow-md shadow-emerald-100"
+                            : "bg-white text-gray-700 hover:bg-emerald-50 border border-emerald-100"
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    );
+                  })}
+
+                  <button
+                    disabled={currentPage === totalPages}
+                    onClick={() => {
+                      setCurrentPage(prev => Math.min(prev + 1, totalPages));
+                      document.getElementById("katalog")?.scrollIntoView({ behavior: "smooth" });
+                    }}
+                    className="px-4 py-2 border border-emerald-100 rounded-xl text-sm font-semibold text-gray-700 bg-white hover:bg-emerald-50 disabled:opacity-40 disabled:hover:bg-white transition-all flex items-center gap-1"
+                  >
+                    Selanjutnya <ChevronRight size={16} />
+                  </button>
+                </div>
+
+                <div className="text-sm text-gray-500 font-medium">
+                  Menampilkan <span className="font-bold text-gray-800">{startIdx}–{endIdx}</span> dari <span className="font-bold text-gray-800">{filtered.length}</span> hasil
+                </div>
+              </div>
+            )}
+          </>
         ) : (
           <div className="text-center py-24"><Package size={48} className="mx-auto mb-4 text-pink-200" /><p className="text-lg font-semibold text-gray-400">Produk tidak ditemukan</p></div>
         )}
