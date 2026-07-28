@@ -2019,6 +2019,175 @@ function GuestChatWidget() {
   );
 }
 
+// ─── Admin Chat Session Item Component with Hold-and-Swipe Gesture ──────────
+function SessionItem({ 
+  session, 
+  isActive,
+  onSelect, 
+  onDelete, 
+  relTime 
+}: { 
+  session: ChatSession; 
+  isActive?: boolean;
+  onSelect: () => void; 
+  onDelete: () => void; 
+  relTime: (ts: number) => string;
+}) {
+  const [dragOffset, setDragOffset] = useState(0);
+  const [isHoldActive, setIsHoldActive] = useState(false);
+  const [holdProgress, setHoldProgress] = useState(0);
+  
+  const startXRef = useRef(0);
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isLongPressedRef = useRef(false);
+  const dragOffsetRef = useRef(0);
+
+  const lastMsg = session.messages[session.messages.length - 1];
+  const hasUnread = session.unreadByAdmin > 0;
+
+  const handleStart = (clientX: number) => {
+    startXRef.current = clientX;
+    isLongPressedRef.current = false;
+    dragOffsetRef.current = 0;
+    setDragOffset(0);
+    setIsHoldActive(false);
+    setHoldProgress(0);
+
+    const holdDuration = 1500; // 1.5 seconds hold
+    const intervalTime = 50;
+    let elapsed = 0;
+
+    progressIntervalRef.current = setInterval(() => {
+      elapsed += intervalTime;
+      const pct = Math.min((elapsed / holdDuration) * 100, 100);
+      setHoldProgress(pct);
+    }, intervalTime);
+
+    holdTimerRef.current = setTimeout(() => {
+      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+      isLongPressedRef.current = true;
+      setIsHoldActive(true);
+      if (navigator.vibrate) {
+        navigator.vibrate(50);
+      }
+    }, holdDuration);
+  };
+
+  const handleMove = (clientX: number) => {
+    if (!isLongPressedRef.current) {
+      if (Math.abs(clientX - startXRef.current) > 10) {
+        cancelHold();
+      }
+      return;
+    }
+    const diff = clientX - startXRef.current;
+    if (diff > 0) {
+      dragOffsetRef.current = diff;
+      setDragOffset(diff);
+    }
+  };
+
+  const handleEnd = () => {
+    cancelHold();
+    if (isLongPressedRef.current) {
+      if (dragOffsetRef.current > 130) {
+        onDelete();
+      } else {
+        setDragOffset(0);
+      }
+    } else {
+      onSelect();
+    }
+  };
+
+  const cancelHold = () => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
+    setIsHoldActive(false);
+    setHoldProgress(0);
+  };
+
+  useEffect(() => {
+    return () => cancelHold();
+  }, []);
+
+  return (
+    <div className="relative overflow-hidden bg-rose-50 min-h-[72px]">
+      {/* Background Swipe indicator */}
+      <div 
+        className="absolute inset-y-0 left-0 bg-gradient-to-r from-red-500 to-rose-600 flex items-center px-4 transition-all"
+        style={{ 
+          width: `${Math.max(dragOffset, 0)}px`,
+          opacity: dragOffset > 20 ? 1 : 0
+        }}
+      >
+        <div className={`flex items-center gap-2 text-white font-bold text-xs whitespace-nowrap transition-transform duration-150 ${dragOffset > 130 ? 'scale-110' : 'scale-100'}`}>
+          <Trash2 size={16} className={dragOffset > 130 ? "animate-bounce" : ""} />
+          {dragOffset > 130 ? "Lepaskan untuk Hapus" : "Geser ke Kanan"}
+        </div>
+      </div>
+
+      {/* Foreground Chat Item */}
+      <div
+        onMouseDown={(e) => handleStart(e.clientX)}
+        onMouseMove={(e) => handleMove(e.clientX)}
+        onMouseUp={handleEnd}
+        onMouseLeave={handleEnd}
+        onTouchStart={(e) => handleStart(e.touches[0].clientX)}
+        onTouchMove={(e) => handleMove(e.touches[0].clientX)}
+        onTouchEnd={handleEnd}
+        style={{
+          transform: `translateX(${dragOffset}px)`,
+          transition: dragOffset === 0 ? "transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)" : "none"
+        }}
+        className={`w-full text-left px-4 py-3 flex gap-3 items-center bg-white border-b border-pink-50 select-none cursor-pointer transition-colors relative z-10 ${
+          isActive ? "bg-gradient-to-r from-pink-50 to-violet-50 border-l-2 border-l-pink-500 font-semibold" : hasUnread ? "bg-pink-50/10 font-semibold" : "hover:bg-pink-50/30"
+        } ${isHoldActive ? "shadow-md bg-amber-50/20" : ""}`}
+      >
+        {/* Hold progress bar */}
+        {holdProgress > 0 && holdProgress < 100 && (
+          <div 
+            className="absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-pink-500 to-violet-600 transition-all duration-75"
+            style={{ width: `${holdProgress}%` }}
+          />
+        )}
+        
+        {/* Held status indicator */}
+        {isHoldActive && (
+          <div className="absolute top-1 right-1 flex items-center gap-1 bg-amber-100 text-amber-800 text-[8px] font-extrabold px-1.5 py-0.5 rounded-full uppercase tracking-wide animate-pulse">
+            Geser Kanan untuk Hapus
+          </div>
+        )}
+
+        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-400 to-violet-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+          {session.guestLabel.slice(-2)}
+        </div>
+        <div className="flex-1 min-w-0 text-left">
+          <div className="flex justify-between items-center mb-0.5">
+            <span className={`text-xs font-bold text-[#1a0a2e] truncate ${hasUnread ? "text-pink-600 font-extrabold" : ""}`}>{session.guestLabel}</span>
+            <span className="text-[9px] text-gray-300 shrink-0">{relTime(session.lastActivity)}</span>
+          </div>
+          <p className={`text-[11px] truncate ${hasUnread ? "text-gray-800 font-semibold" : "text-gray-400"}`}>
+            {lastMsg ? lastMsg.text : "Belum ada pesan"}
+          </p>
+        </div>
+        {hasUnread && (
+          <span className="w-4 h-4 bg-pink-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center shrink-0">
+            {session.unreadByAdmin}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Admin Chat Panel ──────────────────────────────────────────────────────────
 function AdminChat() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -2113,6 +2282,23 @@ function AdminChat() {
     return new Date(ts).toLocaleDateString("id-ID", { day: "numeric", month: "short" });
   };
 
+  const handleDelete = async (sessionId: string) => {
+    const toastId = toast.loading("Menghapus percakapan...");
+    const chats = loadChats().filter((c) => c.sessionId !== sessionId);
+    saveChats(chats);
+    setSessions(chats);
+    if (activeId === sessionId) {
+      setActiveId(null);
+    }
+    const success = await dbDeleteChat(sessionId);
+    if (success) {
+      toast.success("Percakapan berhasil dihapus!", { id: toastId });
+    } else {
+      toast.error("Gagal menghapus dari cloud.", { id: toastId });
+    }
+    refresh();
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -2126,7 +2312,7 @@ function AdminChat() {
           <div className="px-4 py-3 border-b border-pink-100">
             <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">{sessions.length} percakapan</p>
           </div>
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto" style={{ minHeight: 0 }}>
             {sessions.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full text-center p-6">
                 <div className="w-12 h-12 bg-pink-50 rounded-full flex items-center justify-center mb-3">
@@ -2136,32 +2322,16 @@ function AdminChat() {
                 <p className="text-xs text-gray-300 mt-1">Pesan dari tamu akan muncul di sini</p>
               </div>
             )}
-            {sessions.map((s) => {
-              const last = s.messages[s.messages.length - 1];
-              return (
-                <button
-                  key={s.sessionId}
-                  onClick={() => setActiveId(s.sessionId)}
-                  className={`w-full text-left px-4 py-3 border-b border-pink-50 hover:bg-pink-50 transition-colors ${activeId === s.sessionId ? "bg-gradient-to-r from-pink-50 to-violet-50 border-l-2 border-l-pink-500" : ""}`}
-                >
-                  <div className="flex items-center justify-between mb-0.5">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-pink-400 to-violet-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
-                        {s.guestLabel.slice(-2)}
-                      </div>
-                      <span className="text-sm font-semibold text-[#1a0a2e] truncate">{s.guestLabel}</span>
-                    </div>
-                    {s.unreadByAdmin > 0 && (
-                      <span className="w-5 h-5 bg-pink-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shrink-0">
-                        {s.unreadByAdmin}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-gray-400 truncate ml-9">{last ? last.text : "Belum ada pesan"}</p>
-                  <p className="text-[10px] text-gray-300 ml-9 mt-0.5">{relTime(s.lastActivity)}</p>
-                </button>
-              );
-            })}
+            {sessions.map((s) => (
+              <SessionItem
+                key={s.sessionId}
+                session={s}
+                isActive={activeId === s.sessionId}
+                onSelect={() => setActiveId(s.sessionId)}
+                onDelete={() => handleDelete(s.sessionId)}
+                relTime={relTime}
+              />
+            ))}
           </div>
         </div>
 
@@ -2321,6 +2491,23 @@ function AdminChatWidget() {
     dbUpsertChatSession(updated);
   };
 
+  const handleDelete = async (sessionId: string) => {
+    const toastId = toast.loading("Menghapus percakapan...");
+    const chats = loadChats().filter((c) => c.sessionId !== sessionId);
+    saveChats(chats);
+    setSessions(chats);
+    if (activeId === sessionId) {
+      setActiveId(null);
+    }
+    const success = await dbDeleteChat(sessionId);
+    if (success) {
+      toast.success("Percakapan berhasil dihapus!", { id: toastId });
+    } else {
+      toast.error("Gagal menghapus dari cloud.", { id: toastId });
+    }
+    refresh();
+  };
+
   const totalUnread = sessions.reduce((sum, s) => sum + s.unreadByAdmin, 0);
 
   const timeStr = (ts: number) => new Date(ts).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
@@ -2432,7 +2619,7 @@ function AdminChatWidget() {
               </div>
 
               {/* Conversation List */}
-              <div className="flex-1 overflow-y-auto divide-y divide-pink-50">
+              <div className="flex-1 overflow-y-auto divide-y divide-pink-50" style={{ minHeight: 0 }}>
                 {filteredSessions.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-center p-6">
                     <div className="w-10 h-10 bg-pink-50 rounded-full flex items-center justify-center mb-2">
@@ -2441,35 +2628,15 @@ function AdminChatWidget() {
                     <p className="text-xs text-gray-400">Belum ada pesan</p>
                   </div>
                 ) : (
-                  filteredSessions.map((s) => {
-                    const lastMsg = s.messages[s.messages.length - 1];
-                    const hasUnread = s.unreadByAdmin > 0;
-                    return (
-                      <button
-                        key={s.sessionId}
-                        onClick={() => setActiveId(s.sessionId)}
-                        className={`w-full text-left px-4 py-3 flex gap-3 items-center hover:bg-pink-50/50 transition-colors ${hasUnread ? "bg-pink-50/20 font-semibold" : ""}`}
-                      >
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-400 to-violet-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
-                          {s.guestLabel.slice(-2)}
-                        </div>
-                        <div className="flex-1 min-w-0 text-left">
-                          <div className="flex justify-between items-center mb-0.5">
-                            <span className="text-xs font-bold text-[#1a0a2e] truncate">{s.guestLabel}</span>
-                            <span className="text-[9px] text-gray-300 shrink-0">{relTime(s.lastActivity)}</span>
-                          </div>
-                          <p className={`text-[11px] truncate ${hasUnread ? "text-pink-600 font-medium" : "text-gray-400"}`}>
-                            {lastMsg ? lastMsg.text : "Belum ada pesan"}
-                          </p>
-                        </div>
-                        {hasUnread && (
-                          <span className="w-4 h-4 bg-pink-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center shrink-0">
-                            {s.unreadByAdmin}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })
+                  filteredSessions.map((s) => (
+                    <SessionItem
+                      key={s.sessionId}
+                      session={s}
+                      onSelect={() => setActiveId(s.sessionId)}
+                      onDelete={() => handleDelete(s.sessionId)}
+                      relTime={relTime}
+                    />
+                  ))
                 )}
               </div>
             </>
