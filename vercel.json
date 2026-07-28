@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "outputDirectory": "public/app",
   "functions": {
     "api/index.php": {
       "runtime": "vercel-php@0.7.2"
@@ -12,11 +13,11 @@
     },
     {
       "src": "/assets/(.*)",
-      "dest": "public/app/assets/$1"
+      "dest": "/assets/$1"
     },
     {
       "src": "/(.*)",
-      "dest": "public/app/index.html"
+      "dest": "/index.html"
     }
   ]
 }
