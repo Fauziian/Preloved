@@ -46,10 +46,9 @@ if (isset($_SERVER['VERCEL']) || env('VERCEL') || isset($_ENV['VERCEL'])) {
         copy($dbSrc, $dbDst);
     }
     
-    // Override the DB_DATABASE environment variable and config path
+    // Override the DB_DATABASE environment variable
     $_ENV['DB_DATABASE'] = $dbDst;
     putenv("DB_DATABASE={$dbDst}");
-    config(['database.connections.sqlite.database' => $dbDst]);
 }
 
 return $app;
