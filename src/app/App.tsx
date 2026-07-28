@@ -26,8 +26,10 @@ import {
 import {
   dbFetchProducts, dbSaveProduct, dbDeleteProduct,
   dbFetchChats, dbUpsertChatSession, dbSaveChatMessage,
-  dbSubscribeRealtime, dbFetchVisitors, dbSaveVisitors
+  dbSubscribeRealtime, dbFetchVisitors, dbSaveVisitors,
+  dbDeleteChat
 } from "@/lib/supabaseSync";
+import { Toaster, toast } from "sonner";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Variant { name: string; options: string[] }
@@ -128,7 +130,13 @@ const fmt = (n: number) => "Rp " + n.toLocaleString("id-ID");
 const disc = (ori: number, cur: number) => ori > cur ? Math.round(((ori - cur) / ori) * 100) : 0;
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
 const loadProds = (): Product[] => { try { const r = localStorage.getItem(STORAGE_KEY); if (r) return JSON.parse(r); } catch {} localStorage.setItem(STORAGE_KEY, JSON.stringify(SEED)); return SEED; };
-const saveProds = (p: Product[]) => localStorage.setItem(STORAGE_KEY, JSON.stringify(p));
+const saveProds = (p: Product[]) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(p));
+  } catch (e) {
+    console.error("Gagal menyimpan produk ke localStorage:", e);
+  }
+};
 
 // ─── Photo renderer ───────────────────────────────────────────────────────────
 function Photo({ src, alt, className }: { src: string; alt: string; className?: string }) {
@@ -1150,6 +1158,54 @@ function FormField({ label, children, req }: { label: string; children: React.Re
 
 const FORM_INP = "w-full px-4 py-3 bg-[#fdf7fb] border border-pink-200 rounded-xl text-sm outline-none focus:border-pink-400 transition-colors";
 
+// ─── Image Compression Helper ──────────────────────────────────────────────────
+function compressImage(file: File, maxWidth = 800, maxHeight = 800, quality = 0.7): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(event.target?.result as string);
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(dataUrl);
+      };
+      img.onerror = (err) => {
+        reject(err);
+      };
+    };
+    reader.onerror = (err) => {
+      reject(err);
+    };
+  });
+}
+
 // ─── Product Form ─────────────────────────────────────────────────────────────
 function ProductForm({ initial, onSave, onCancel }: { initial?: Product; onSave: (p: Product) => void; onCancel: () => void }) {
   const [form, setForm] = useState<Product>(initial ?? {
@@ -1159,17 +1215,33 @@ function ProductForm({ initial, onSave, onCancel }: { initial?: Product; onSave:
   });
   const [tagInput, setTagInput] = useState("");
   const [saving, setSaving] = useState(false);
+  const [compressing, setCompressing] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const up = useCallback(<K extends keyof Product>(k: K, v: Product[K]) => setForm((f) => ({ ...f, [k]: v })), []);
 
-  const handlePhotos = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    Array.from(e.target.files ?? []).forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = (ev) => setForm((f) => ({ ...f, photos: [...f.photos, ev.target?.result as string] }));
-      reader.readAsDataURL(file);
-    });
-    e.target.value = "";
+  const handlePhotos = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+
+    setCompressing(true);
+    const toastId = toast.loading("Memproses dan mengompres foto...");
+
+    try {
+      const compressedPhotos: string[] = [];
+      for (const file of files) {
+        const compressedBase64 = await compressImage(file);
+        compressedPhotos.push(compressedBase64);
+      }
+      setForm((f) => ({ ...f, photos: [...f.photos, ...compressedPhotos] }));
+      toast.success("Foto berhasil diproses!", { id: toastId });
+    } catch (err) {
+      console.error("Gagal memproses foto:", err);
+      toast.error("Gagal memproses beberapa foto.", { id: toastId });
+    } finally {
+      setCompressing(false);
+      if (e.target) e.target.value = "";
+    }
   }, []);
 
   const handleName = useCallback((e: React.ChangeEvent<HTMLInputElement>) => up("name", e.target.value), [up]);
@@ -1211,7 +1283,7 @@ function ProductForm({ initial, onSave, onCancel }: { initial?: Product; onSave:
     if (e.key === "Enter") { e.preventDefault(); addTag(); }
   }, [addTag]);
 
-  const submit = useCallback((e: React.FormEvent) => {
+  const submit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Validation
@@ -1226,13 +1298,24 @@ function ProductForm({ initial, onSave, onCancel }: { initial?: Product; onSave:
     const hasMaterial = form.material && form.material.trim() !== "";
     const hasDescription = form.description && form.description.trim() !== "";
 
-    if (!hasPhotos || !hasName || !hasPrice || !hasCondition || !hasCategory || !hasBrand || !hasStock || !hasWeight || !hasMaterial || !hasDescription) {
-      alert("form wajib di isi");
+    if (!hasPhotos) {
+      toast.error("Harap unggah minimal 1 foto produk!");
+      return;
+    }
+    if (!hasName || !hasPrice || !hasCondition || !hasCategory || !hasBrand || !hasStock || !hasWeight || !hasMaterial || !hasDescription) {
+      toast.error("Harap lengkapi semua kolom wajib (*) yang bertanda bintang!");
       return;
     }
 
     setSaving(true);
-    setTimeout(() => { onSave(form); setSaving(false); }, 500);
+    try {
+      await onSave(form);
+    } catch (err) {
+      console.error(err);
+      toast.error("Gagal menyimpan produk.");
+    } finally {
+      setSaving(false);
+    }
   }, [form, onSave]);
 
   return (
@@ -1256,11 +1339,18 @@ function ProductForm({ initial, onSave, onCancel }: { initial?: Product; onSave:
                 {i === 0 && <span className="absolute bottom-1 left-1 text-[9px] bg-black/60 text-white px-1.5 py-0.5 rounded">Cover</span>}
               </div>
             ))}
-            <button type="button" onClick={() => fileRef.current?.click()}
-              className="w-24 h-24 rounded-xl border-2 border-dashed border-pink-300 flex flex-col items-center justify-center text-pink-400 hover:border-pink-500 hover:bg-pink-50 transition-all gap-1">
-              <Upload size={18} /><span className="text-[10px] font-semibold">Upload</span>
+            <button type="button" onClick={() => fileRef.current?.click()} disabled={compressing}
+              className="w-24 h-24 rounded-xl border-2 border-dashed border-pink-300 flex flex-col items-center justify-center text-pink-400 hover:border-pink-500 hover:bg-pink-50 transition-all gap-1 disabled:opacity-60">
+              {compressing ? (
+                <div className="w-5 h-5 border-2 border-pink-500/30 border-t-pink-500 rounded-full animate-spin" />
+              ) : (
+                <>
+                  <Upload size={18} />
+                  <span className="text-[10px] font-semibold">Upload</span>
+                </>
+              )}
             </button>
-            <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={handlePhotos} />
+            <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={handlePhotos} disabled={compressing} />
           </div>
           <p className="text-xs text-gray-400">Foto pertama = cover. Upload minimal 1 foto. Foto asli sangat disarankan.</p>
         </div>
@@ -1541,6 +1631,9 @@ export default function App() {
   };
 
   const handleSave = async (p: Product) => {
+    const isEdit = !!editProd;
+    const toastId = toast.loading(isEdit ? "Menyimpan perubahan..." : "Menambahkan produk baru...");
+
     // Optimistic UI update with functional state to avoid closure bugs
     setProducts((prev) => {
       const next = prev.find((x) => x.id === p.id) ? prev.map((x) => x.id === p.id ? p : x) : [...prev, p];
@@ -1548,9 +1641,21 @@ export default function App() {
       return next;
     });
     
-    // Save to database
-    await dbSaveProduct(p as any);
-    nav("admin-products"); setEditProd(null);
+    try {
+      // Save to database
+      const success = await dbSaveProduct(p as any);
+      if (success) {
+        toast.success(isEdit ? "Produk berhasil diperbarui!" : "Produk berhasil ditambahkan!", { id: toastId });
+      } else {
+        toast.error("Gagal menyimpan ke cloud, disimpan secara lokal.", { id: toastId });
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Gagal menyimpan ke cloud (Timeout/Error).", { id: toastId });
+    }
+
+    nav("admin-products"); 
+    setEditProd(null);
   };
 
   const isAdmin = page.startsWith("admin") && page !== "admin-login";
@@ -1574,6 +1679,8 @@ export default function App() {
   if (isAdmin) {
     return (
       <div className="min-h-screen bg-[#fdf7fb] flex flex-col" style={{ fontFamily: "'Poppins',sans-serif" }}>
+        <Toaster position="top-center" richColors />
+        <AdminChatWidget />
         {/* Mobile top bar */}
         <div className="md:hidden flex items-center gap-3 px-4 py-3 bg-white border-b border-pink-100 sticky top-0 z-40 shadow-sm">
           <button
@@ -1607,20 +1714,39 @@ export default function App() {
               <AdminProducts products={products} onAdd={() => nav("admin-add")}
                 onEdit={(p) => { setEditProd(p); nav("admin-edit"); }}
                 onDelete={async (id) => {
+                  const toastId = toast.loading("Menghapus produk...");
                   setProducts((prev) => {
                     const next = prev.filter((p) => p.id !== id);
                     saveProds(next);
                     return next;
                   });
-                  await dbDeleteProduct(id);
+                  try {
+                    const success = await dbDeleteProduct(id);
+                    if (success) {
+                      toast.success("Produk berhasil dihapus!", { id: toastId });
+                    } else {
+                      toast.error("Gagal menghapus dari cloud.", { id: toastId });
+                    }
+                  } catch (e) {
+                    toast.error("Gagal menghapus dari cloud.", { id: toastId });
+                  }
                 }}
                 onToggle={async (id) => {
+                  const toastId = toast.loading("Mengubah status produk...");
                   setProducts((prev) => {
                     const next = prev.map((p) => p.id === id ? { ...p, status: p.status === "published" ? "draft" : "published" } : p);
                     saveProds(next);
                     const target = next.find((p) => p.id === id);
                     if (target) {
-                      dbSaveProduct(target as any);
+                      dbSaveProduct(target as any).then((success) => {
+                        if (success) {
+                          toast.success("Status produk berhasil diubah!", { id: toastId });
+                        } else {
+                          toast.error("Gagal memperbarui status di cloud.", { id: toastId });
+                        }
+                      }).catch(() => {
+                        toast.error("Gagal memperbarui status di cloud.", { id: toastId });
+                      });
                     }
                     return next;
                   });
@@ -1638,6 +1764,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-white flex flex-col" style={{ fontFamily: "'Poppins',sans-serif" }}>
+      <Toaster position="top-center" richColors />
       <Navbar onNav={nav} page={page} />
       <main className="flex-1">
         {page === "catalog" && <CatalogPage products={products} onDetail={goDetail} />}
@@ -1903,12 +2030,20 @@ function AdminChat() {
     const dbSessions = await dbFetchChats();
     const all = loadChats();
     if (dbSessions) {
-      const merged = mergeSessions(all, dbSessions);
-      saveChats(merged);
-      setSessions([...merged].sort((a, b) => b.lastActivity - a.lastActivity));
+      // Find automatic guests and delete them asynchronously from database
+      const guestsToDelete = dbSessions.filter(s => s.guestLabel.startsWith("Guest #") || s.guestLabel.startsWith("Guest"));
+      if (guestsToDelete.length > 0) {
+        guestsToDelete.forEach(g => dbDeleteChat(g.sessionId));
+      }
+      
+      const dbCleaned = dbSessions.filter(s => !s.guestLabel.startsWith("Guest #") && !s.guestLabel.startsWith("Guest"));
+      const merged = mergeSessions(all, dbCleaned);
+      const cleaned = merged.filter(s => !s.guestLabel.startsWith("Guest #") && !s.guestLabel.startsWith("Guest"));
+      saveChats(cleaned);
+      setSessions([...cleaned].sort((a, b) => b.lastActivity - a.lastActivity));
     } else {
-      // LocalStorage Fallback
-      setSessions([...all].sort((a, b) => b.lastActivity - a.lastActivity));
+      const cleaned = all.filter(s => !s.guestLabel.startsWith("Guest #") && !s.guestLabel.startsWith("Guest"));
+      setSessions([...cleaned].sort((a, b) => b.lastActivity - a.lastActivity));
     }
   }, []);
 
@@ -2101,5 +2236,260 @@ function AdminChat() {
         )}
       </div>
     </div>
+  );
+}
+
+// ─── Admin Floating Chat Widget ──────────────────────────────────────────────
+function AdminChatWidget() {
+  const [open, setOpen] = useState(false);
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [input, setInput] = useState("");
+  const [search, setSearch] = useState("");
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  const refresh = useCallback(async () => {
+    const dbSessions = await dbFetchChats();
+    const all = loadChats();
+    if (dbSessions) {
+      // Find automatic guests and delete them asynchronously from database
+      const guestsToDelete = dbSessions.filter(s => s.guestLabel.startsWith("Guest #") || s.guestLabel.startsWith("Guest"));
+      if (guestsToDelete.length > 0) {
+        guestsToDelete.forEach(g => dbDeleteChat(g.sessionId));
+      }
+      
+      const dbCleaned = dbSessions.filter(s => !s.guestLabel.startsWith("Guest #") && !s.guestLabel.startsWith("Guest"));
+      const merged = mergeSessions(all, dbCleaned);
+      const cleaned = merged.filter(s => !s.guestLabel.startsWith("Guest #") && !s.guestLabel.startsWith("Guest"));
+      saveChats(cleaned);
+      setSessions([...cleaned].sort((a, b) => b.lastActivity - a.lastActivity));
+    } else {
+      const cleaned = all.filter(s => !s.guestLabel.startsWith("Guest #") && !s.guestLabel.startsWith("Guest"));
+      setSessions([...cleaned].sort((a, b) => b.lastActivity - a.lastActivity));
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+
+    const unsubSessions = dbSubscribeRealtime("chat_sessions", refresh);
+    const unsubMessages = dbSubscribeRealtime("chat_messages", refresh);
+
+    const t = setInterval(refresh, 4000);
+    return () => {
+      unsubSessions();
+      unsubMessages();
+      clearInterval(t);
+    };
+  }, [refresh]);
+
+  const active = sessions.find((s) => s.sessionId === activeId) ?? null;
+
+  useEffect(() => {
+    if (!activeId) return;
+    async function markRead() {
+      const chats = loadChats();
+      const idx = chats.findIndex((c) => c.sessionId === activeId);
+      if (idx >= 0 && chats[idx].unreadByAdmin > 0) {
+        const updated = { ...chats[idx], unreadByAdmin: 0 };
+        chats[idx] = updated;
+        saveChats(chats);
+        refresh();
+        await dbUpsertChatSession(updated);
+      }
+    }
+    markRead();
+  }, [activeId, refresh]);
+
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [active?.messages.length]);
+
+  const send = async () => {
+    if (!input.trim() || !activeId) return;
+    const msg: ChatMsg = { id: uid(), from: "admin", text: input.trim(), ts: Date.now() };
+    
+    const chats = loadChats();
+    const idx = chats.findIndex((c) => c.sessionId === activeId);
+    if (idx < 0) return;
+    const updated = { ...chats[idx], messages: [...chats[idx].messages, msg], lastActivity: Date.now() };
+    chats[idx] = updated;
+    saveChats(chats);
+    setInput("");
+    
+    setSessions([...chats].sort((a, b) => b.lastActivity - a.lastActivity));
+
+    dbSaveChatMessage(msg, activeId);
+    dbUpsertChatSession(updated);
+  };
+
+  const totalUnread = sessions.reduce((sum, s) => sum + s.unreadByAdmin, 0);
+
+  const timeStr = (ts: number) => new Date(ts).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+  
+  const relTime = (ts: number) => {
+    const diff = Date.now() - ts;
+    if (diff < 60000) return "baru saja";
+    if (diff < 3600000) return `${Math.floor(diff / 60000)} mnt lalu`;
+    return new Date(ts).toLocaleDateString("id-ID", { day: "numeric", month: "short" });
+  };
+
+  const filteredSessions = sessions.filter(s => 
+    s.guestLabel.toLowerCase().includes(search.toLowerCase()) || 
+    (s.messages[s.messages.length - 1]?.text || "").toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <>
+      {open && (
+        <div className="fixed bottom-24 right-6 z-50 w-[350px] h-[520px] rounded-2xl shadow-2xl border border-pink-100 overflow-hidden flex flex-col bg-white transition-all duration-300">
+          {active ? (
+            /* Active Chat Screen */
+            <>
+              {/* Header */}
+              <div className="bg-gradient-to-r from-[#8b5cf6] to-[#ec4899] px-4 py-3 flex items-center gap-3 shrink-0">
+                <button onClick={() => setActiveId(null)} className="text-white/80 hover:text-white p-1 hover:bg-white/10 rounded-lg transition-all">
+                  <ChevronLeft size={18} />
+                </button>
+                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-xs font-bold">
+                  {active.guestLabel.slice(-2)}
+                </div>
+                <div className="flex-1 text-left">
+                  <p className="text-white font-bold text-sm truncate">{active.guestLabel}</p>
+                  <p className="text-white/70 text-[10px]">{active.messages.length} pesan</p>
+                </div>
+                <button onClick={() => setOpen(false)} className="text-white/70 hover:text-white transition-colors"><X size={18} /></button>
+              </div>
+
+              {/* Message List */}
+              <div className="flex-1 overflow-y-auto bg-[#f9f4fd] px-4 py-3 space-y-3" style={{ minHeight: 0 }}>
+                {active.messages.length === 0 && (
+                  <div className="flex items-center justify-center h-full text-gray-400 text-xs">
+                    Belum ada pesan dari tamu ini.
+                  </div>
+                )}
+                {active.messages.map((m) => (
+                  <div key={m.id} className={`flex gap-2 items-end ${m.from === "admin" ? "flex-row-reverse" : ""}`}>
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-white text-[8px] font-bold ${m.from === "admin" ? "bg-gradient-to-br from-pink-400 to-violet-500" : "bg-gray-300"}`}>
+                      {m.from === "admin" ? "A" : active.guestLabel.slice(-2)}
+                    </div>
+                    <div className={`rounded-2xl px-3 py-2 shadow-sm max-w-[78%] text-left ${m.from === "admin" ? "bg-gradient-to-br from-pink-500 to-violet-600 text-white rounded-br-sm" : "bg-white text-[#1a0a2e] rounded-bl-sm"}`}>
+                      <p className="text-xs leading-relaxed">{m.text}</p>
+                      <p className={`text-[9px] mt-0.5 ${m.from === "admin" ? "text-white/60 text-right" : "text-gray-400 text-right"}`}>{timeStr(m.ts)}</p>
+                    </div>
+                  </div>
+                ))}
+                <div ref={bottomRef} />
+              </div>
+
+              {/* Reply Input */}
+              <div className="bg-white border-t border-pink-100 p-3 flex gap-2 shrink-0">
+                <input
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
+                  placeholder={`Balas ke ${active.guestLabel}...`}
+                  className="flex-1 text-xs bg-[#fdf7fb] border border-pink-200 rounded-xl px-3 py-2 outline-none focus:border-pink-400 transition-colors"
+                />
+                <button
+                  onClick={send}
+                  disabled={!input.trim()}
+                  className="w-8 h-8 bg-gradient-to-br from-pink-500 to-violet-600 rounded-xl flex items-center justify-center disabled:opacity-40 hover:shadow-md transition-all shrink-0"
+                >
+                  <Send size={13} className="text-white" />
+                </button>
+              </div>
+            </>
+          ) : (
+            /* Session List Screen */
+            <>
+              {/* Header */}
+              <div className="bg-gradient-to-r from-[#8b5cf6] to-[#ec4899] px-4 py-4 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
+                    <MessageCircle size={16} className="text-white" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-white font-bold text-sm">Pesan Masuk</p>
+                    <p className="text-white/80 text-[10px] flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                      Sync aktif
+                    </p>
+                  </div>
+                </div>
+                <button onClick={() => setOpen(false)} className="text-white/70 hover:text-white transition-colors"><X size={18} /></button>
+              </div>
+
+              {/* Search Bar */}
+              <div className="px-3 py-2 bg-[#fdf7fb] border-b border-pink-50 flex items-center gap-2">
+                <Search size={12} className="text-pink-400" />
+                <input
+                  type="text"
+                  placeholder="Cari chat tamu..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full bg-transparent text-xs outline-none"
+                />
+                {search && <button onClick={() => setSearch("")}><X size={11} className="text-gray-300" /></button>}
+              </div>
+
+              {/* Conversation List */}
+              <div className="flex-1 overflow-y-auto divide-y divide-pink-50">
+                {filteredSessions.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-center p-6">
+                    <div className="w-10 h-10 bg-pink-50 rounded-full flex items-center justify-center mb-2">
+                      <MessageCircle size={18} className="text-pink-300" />
+                    </div>
+                    <p className="text-xs text-gray-400">Belum ada pesan</p>
+                  </div>
+                ) : (
+                  filteredSessions.map((s) => {
+                    const lastMsg = s.messages[s.messages.length - 1];
+                    const hasUnread = s.unreadByAdmin > 0;
+                    return (
+                      <button
+                        key={s.sessionId}
+                        onClick={() => setActiveId(s.sessionId)}
+                        className={`w-full text-left px-4 py-3 flex gap-3 items-center hover:bg-pink-50/50 transition-colors ${hasUnread ? "bg-pink-50/20 font-semibold" : ""}`}
+                      >
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-400 to-violet-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+                          {s.guestLabel.slice(-2)}
+                        </div>
+                        <div className="flex-1 min-w-0 text-left">
+                          <div className="flex justify-between items-center mb-0.5">
+                            <span className="text-xs font-bold text-[#1a0a2e] truncate">{s.guestLabel}</span>
+                            <span className="text-[9px] text-gray-300 shrink-0">{relTime(s.lastActivity)}</span>
+                          </div>
+                          <p className={`text-[11px] truncate ${hasUnread ? "text-pink-600 font-medium" : "text-gray-400"}`}>
+                            {lastMsg ? lastMsg.text : "Belum ada pesan"}
+                          </p>
+                        </div>
+                        {hasUnread && (
+                          <span className="w-4 h-4 bg-pink-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center shrink-0">
+                            {s.unreadByAdmin}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Floating Button (FAB) */}
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-[#8b5cf6] to-[#ec4899] shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200 flex items-center justify-center"
+        aria-label="Tamu Chat"
+      >
+        {open ? <X size={22} className="text-white" /> : <MessageCircle size={22} className="text-white" />}
+        {totalUnread > 0 && (
+          <span className="absolute -top-1.5 -right-1.5 min-w-[22px] h-[22px] px-1 bg-red-500 rounded-full border-2 border-white text-white text-[10px] font-extrabold flex items-center justify-center animate-bounce">
+            {totalUnread}
+          </span>
+        )}
+      </button>
+    </>
   );
 }

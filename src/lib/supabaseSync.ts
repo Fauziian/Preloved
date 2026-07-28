@@ -206,6 +206,24 @@ export async function dbUpsertChatSession(sess: ChatSession): Promise<boolean> {
   return true;
 }
 
+export async function dbDeleteChat(sessionId: string): Promise<boolean> {
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { error } = await supabase.from('chats').delete().eq('sessionId', sessionId);
+      if (!error) return true;
+      console.error("Supabase delete chat error:", error);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  await queueWrite((doc) => {
+    doc.chats = (doc.chats || []).filter((x: any) => x.sessionId !== sessionId);
+    return doc;
+  });
+  return true;
+}
+
+
 export async function dbSaveChatMessage(msg: ChatMsg, sessionId: string): Promise<boolean> {
   if (isSupabaseConfigured && supabase) {
     try {
