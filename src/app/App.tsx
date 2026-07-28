@@ -145,9 +145,175 @@ function Photo({ src, alt, className }: { src: string; alt: string; className?: 
   return <ImageWithFallback src={src as never} alt={alt} className={className} />;
 }
 
+// ─── BUTTERFLY CANVAS ─────────────────────────────────────────────────────────
+function ButterflyCanvas() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
+    resize();
+    window.addEventListener("resize", resize);
+
+    // Butterfly definition
+    type BF = { x:number; y:number; vx:number; vy:number; phase:number; size:number; color1:string; color2:string; wingT:number; turnT:number; };
+    const colors: [string,string][] = [
+      ["#f9a8d4","#db2777"], ["#86efac","#16a34a"], ["#fde68a","#d97706"],
+      ["#c4b5fd","#7c3aed"], ["#fda4af","#e11d48"], ["#6ee7b7","#059669"],
+    ];
+    const bfs: BF[] = Array.from({length:6},(_,i)=>({
+      x: Math.random()*window.innerWidth,
+      y: Math.random()*window.innerHeight,
+      vx: (Math.random()-0.5)*1.2+0.6,
+      vy: (Math.random()-0.5)*0.8,
+      phase: Math.random()*Math.PI*2,
+      size: 22+Math.random()*18,
+      color1: colors[i][0],
+      color2: colors[i][1],
+      wingT: 0,
+      turnT: 200+Math.random()*300,
+    }));
+
+    function drawButterfly(b: BF) {
+      if (!ctx) return;
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      const facing = b.vx < 0 ? -1 : 1;
+      ctx.scale(facing, 1);
+      const flapAngle = Math.sin(b.wingT * 0.28) * 0.9;
+      const s = b.size;
+      // Left upper wing
+      ctx.save();
+      ctx.transform(Math.cos(flapAngle), Math.sin(flapAngle)*0.3, 0, 1, 0, 0);
+      ctx.beginPath(); ctx.moveTo(0,0);
+      ctx.bezierCurveTo(-s*0.2,-s*0.9,-s*1.1,-s*0.8,-s*1.0,-s*0.1);
+      ctx.bezierCurveTo(-s*0.85,s*0.3,-s*0.3,s*0.2,0,0);
+      ctx.fillStyle = b.color1; ctx.globalAlpha=0.82; ctx.fill();
+      ctx.strokeStyle=b.color2; ctx.lineWidth=0.7; ctx.stroke();
+      ctx.restore();
+      // Left lower wing
+      ctx.save();
+      ctx.transform(Math.cos(flapAngle*0.8), Math.sin(flapAngle*0.8)*0.2, 0, 1, 0, 0);
+      ctx.beginPath(); ctx.moveTo(0,0);
+      ctx.bezierCurveTo(-s*0.15,s*0.4,-s*0.9,s*1.1,-s*0.7,s*0.55);
+      ctx.bezierCurveTo(-s*0.4,s*0.25,-s*0.1,s*0.15,0,0);
+      ctx.fillStyle = b.color2; ctx.globalAlpha=0.78; ctx.fill();
+      ctx.strokeStyle=b.color2; ctx.lineWidth=0.7; ctx.stroke();
+      ctx.restore();
+      // Right upper wing
+      ctx.save();
+      ctx.transform(Math.cos(-flapAngle), Math.sin(-flapAngle)*0.3, 0, 1, 0, 0);
+      ctx.beginPath(); ctx.moveTo(0,0);
+      ctx.bezierCurveTo(s*0.2,-s*0.9,s*1.1,-s*0.8,s*1.0,-s*0.1);
+      ctx.bezierCurveTo(s*0.85,s*0.3,s*0.3,s*0.2,0,0);
+      ctx.fillStyle = b.color1; ctx.globalAlpha=0.82; ctx.fill();
+      ctx.strokeStyle=b.color2; ctx.lineWidth=0.7; ctx.stroke();
+      ctx.restore();
+      // Right lower wing
+      ctx.save();
+      ctx.transform(Math.cos(-flapAngle*0.8), Math.sin(-flapAngle*0.8)*0.2, 0, 1, 0, 0);
+      ctx.beginPath(); ctx.moveTo(0,0);
+      ctx.bezierCurveTo(s*0.15,s*0.4,s*0.9,s*1.1,s*0.7,s*0.55);
+      ctx.bezierCurveTo(s*0.4,s*0.25,s*0.1,s*0.15,0,0);
+      ctx.fillStyle = b.color2; ctx.globalAlpha=0.78; ctx.fill();
+      ctx.strokeStyle=b.color2; ctx.lineWidth=0.7; ctx.stroke();
+      ctx.restore();
+      // Body
+      ctx.globalAlpha=0.9;
+      ctx.beginPath(); ctx.ellipse(0,0,s*0.1,s*0.45,0,0,Math.PI*2);
+      ctx.fillStyle="#1a0a2e"; ctx.fill();
+      // Antennae
+      ctx.globalAlpha=0.7; ctx.strokeStyle="#1a0a2e"; ctx.lineWidth=0.8;
+      ctx.beginPath(); ctx.moveTo(-2,-s*0.4); ctx.quadraticCurveTo(-s*0.4,-s*0.9,-s*0.5,-s*1.0); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(2,-s*0.4);  ctx.quadraticCurveTo(s*0.4,-s*0.9,s*0.5,-s*1.0);  ctx.stroke();
+      ctx.beginPath(); ctx.arc(-s*0.5,-s*1.0,s*0.08,0,Math.PI*2); ctx.fillStyle="#1a0a2e"; ctx.fill();
+      ctx.beginPath(); ctx.arc( s*0.5,-s*1.0,s*0.08,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+
+    let raf: number;
+    function loop() {
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      bfs.forEach(b => {
+        b.wingT++;
+        b.turnT--;
+        if (b.turnT <= 0) {
+          b.vx = (Math.random()-0.5)*1.4+0.5*(b.vx>0?1:-1)*-1;
+          b.vy = (Math.random()-0.5)*0.9;
+          b.turnT = 180+Math.random()*320;
+        }
+        b.x += b.vx; b.y += b.vy;
+        if (b.x < -80) b.x = canvas.width+80;
+        if (b.x > canvas.width+80) b.x = -80;
+        if (b.y < -80) b.y = canvas.height+80;
+        if (b.y > canvas.height+80) b.y = -80;
+        drawButterfly(b);
+      });
+      raf = requestAnimationFrame(loop);
+    }
+    loop();
+    return () => { cancelAnimationFrame(raf); window.removeEventListener("resize",resize); };
+  },[]);
+  return <canvas ref={canvasRef} id="butterfly-canvas" />;
+}
+
+// ─── NATURE PARTICLES (falling leaves / petals) ───────────────────────────────
+const LEAF_ITEMS = [
+  {left:"8%",  dur:"9s",  delay:"0s",   dx:"70px",  rot:"580deg", color:"#4a9e6a"},
+  {left:"22%", dur:"11s", delay:"2.5s", dx:"-55px", rot:"-620deg",color:"#7fbf7f"},
+  {left:"40%", dur:"8s",  delay:"1s",   dx:"90px",  rot:"720deg", color:"#3d8b5e"},
+  {left:"58%", dur:"13s", delay:"4s",   dx:"-70px", rot:"-480deg",color:"#a8d8a8"},
+  {left:"72%", dur:"10s", delay:"0.5s", dx:"50px",  rot:"640deg", color:"#5aad7a"},
+  {left:"85%", dur:"12s", delay:"6s",   dx:"-60px", rot:"-560deg",color:"#6bbf8a"},
+  {left:"15%", dur:"9.5s",delay:"3s",   dx:"65px",  rot:"700deg", color:"#4a9e6a"},
+  {left:"92%", dur:"11.5s",delay:"7.5s",dx:"-45px", rot:"-600deg",color:"#7fbf7f"},
+];
+const PETAL_ITEMS = [
+  {left:"30%", dur:"12s", delay:"1.5s", dx2:"40px",  color:"#f9a8d4"},
+  {left:"50%", dur:"10s", delay:"5s",   dx2:"-35px", color:"#fda4af"},
+  {left:"65%", dur:"14s", delay:"2s",   dx2:"55px",  color:"#fbcfe8"},
+  {left:"78%", dur:"11s", delay:"8s",   dx2:"-28px", color:"#f0abfc"},
+];
+function NatureParticles() {
+  return (
+    <div className="leaf-rain">
+      {LEAF_ITEMS.map((l,i) => (
+        <div key={`l${i}`} className="leaf-item" style={{left:l.left,"--dur":l.dur,"--delay":l.delay,"--dx":l.dx,"--rot":l.rot} as React.CSSProperties}>
+          <svg width="18" height="22" viewBox="0 0 18 22" style={{opacity:0.7}}>
+            <path d={`M9 0 C14 4,18 11,9 22 C0 11,4 4,9 0Z`} fill={l.color}/>
+            <path d="M9 0 L9 22" stroke="rgba(255,255,255,.35)" strokeWidth="0.7" fill="none"/>
+          </svg>
+        </div>
+      ))}
+      {PETAL_ITEMS.map((p,i) => (
+        <div key={`p${i}`} className="petal-item" style={{left:p.left,"--dur":p.dur,"--delay":p.delay,"--dx2":p.dx2} as React.CSSProperties}>
+          <svg width="14" height="16" viewBox="0 0 14 16" style={{opacity:0.65}}>
+            <ellipse cx="7" cy="8" rx="5" ry="8" fill={p.color} transform="rotate(-20 7 8)"/>
+          </svg>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── SVG Leaf Decoration ──────────────────────────────────────────────────────
+function LeafDecor({ size=40, color="#4a9e6a", opacity=0.18, className="" }: {size?:number;color?:string;opacity?:number;className?:string}) {
+  return (
+    <svg width={size} height={size*1.3} viewBox="0 0 40 52" className={className} style={{opacity}}>
+      <path d="M20 0 C32 8,40 22,20 52 C0 22,8 8,20 0Z" fill={color}/>
+      <path d="M20 0 L20 52" stroke="rgba(255,255,255,.4)" strokeWidth="1.2" fill="none"/>
+      <path d="M20 10 Q14 22 12 34" stroke="rgba(255,255,255,.3)" strokeWidth="0.8" fill="none"/>
+      <path d="M20 10 Q26 22 28 34" stroke="rgba(255,255,255,.3)" strokeWidth="0.8" fill="none"/>
+    </svg>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // PUBLIC SITE
 // ═══════════════════════════════════════════════════════════════════════════════
+
 
 function Navbar({ onNav, page }: { onNav: (p: Page) => void; page: Page }) {
   const [open, setOpen] = useState(false);
@@ -167,31 +333,37 @@ function Navbar({ onNav, page }: { onNav: (p: Page) => void; page: Page }) {
   };
 
   return (
-    <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-xl border-b border-pink-100 shadow-sm">
-      <div className="max-w-7xl mx-auto px-5 h-16 flex items-center justify-between">
-        <button onClick={handleLogoClick} className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-pink-500 to-violet-600 flex items-center justify-center shadow-md shadow-pink-200">
-            <Sparkles size={15} className="text-white" />
+    <nav className="sticky top-0 z-50 nature-navbar">
+      <div className="max-w-7xl mx-auto px-5 h-[68px] flex items-center justify-between">
+        <button onClick={handleLogoClick} className="flex items-center gap-2.5 group">
+          {/* Logo with leaf + sparkle */}
+          <div className="relative w-9 h-9 rounded-2xl bg-gradient-to-br from-emerald-500 via-green-600 to-teal-700 flex items-center justify-center shadow-lg shadow-green-200/60 transition-all group-hover:scale-105 group-hover:shadow-xl group-hover:shadow-green-300/50">
+            <Sparkles size={16} className="text-white" />
+            <LeafDecor size={12} color="#fef9ee" opacity={0.6} className="absolute -top-1.5 -right-1.5" />
           </div>
           <span className="font-extrabold text-xl text-[#1a0a2e]" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
-            Sherly<span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-violet-600">Preloved</span>
+            Sherly<span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-rose-500 to-violet-600">Preloved</span>
+            <span className="block text-[9px] font-semibold tracking-widest text-emerald-600/70 uppercase -mt-1">✦ Nature Collection ✦</span>
           </span>
         </button>
-        <div className="hidden md:flex items-center gap-6">
+        <div className="hidden md:flex items-center gap-7">
           {([["Katalog", "catalog"], ["Tentang", "about"]] as [string, Page][]).map(([l, p]) => (
-            <button key={p} onClick={() => onNav(p)} className={`text-sm font-semibold transition-colors ${page === p ? "text-pink-600" : "text-gray-500 hover:text-pink-500"}`}>{l}</button>
+            <button key={p} onClick={() => onNav(p)} className={`text-sm font-semibold transition-all relative group ${page === p ? "text-emerald-700" : "text-gray-500 hover:text-emerald-600"}`}>
+              {l}
+              <span className={`absolute -bottom-1 left-0 h-0.5 rounded-full bg-gradient-to-r from-emerald-400 to-green-500 transition-all ${page===p?"w-full":"w-0 group-hover:w-full"}`}/>
+            </button>
           ))}
           <a href="https://s.shopee.co.id/gOm3vwsWI?share_channel_code=1" target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-1.5 bg-gradient-to-r from-orange-400 to-orange-500 text-white text-sm font-bold px-4 py-2 rounded-full hover:shadow-md hover:shadow-orange-200 transition-all">
+            className="flex items-center gap-1.5 bg-gradient-to-r from-orange-400 to-orange-500 text-white text-sm font-bold px-4 py-2 rounded-full hover:shadow-lg hover:shadow-orange-200/70 hover:scale-105 transition-all">
             <ShoppingBag size={14} /> Shopee Kami
           </a>
         </div>
         <button className="md:hidden p-2" onClick={() => setOpen(!open)}>
-          {open ? <X size={20} className="text-pink-600" /> : <Menu size={20} className="text-pink-600" />}
+          {open ? <X size={20} className="text-emerald-700" /> : <Menu size={20} className="text-emerald-700" />}
         </button>
       </div>
       {open && (
-        <div className="md:hidden border-t border-pink-100 bg-white px-5 py-4 flex flex-col gap-3">
+        <div className="md:hidden border-t border-emerald-100/50 bg-[#fefdf8]/96 backdrop-blur-xl px-5 py-4 flex flex-col gap-3">
           {([["Katalog", "catalog"], ["Tentang", "about"]] as [string, Page][]).map(([l, p]) => (
             <button key={p} onClick={() => { onNav(p); setOpen(false); }} className="text-sm font-semibold text-gray-700 text-left">{l}</button>
           ))}
@@ -206,53 +378,67 @@ function Navbar({ onNav, page }: { onNav: (p: Page) => void; page: Page }) {
 function ProductCard({ p, onClick }: { p: Product; onClick: () => void }) {
   const d = disc(p.originalPrice, p.price);
   const soldOut = p.status === "sold-out" || p.stock === 0;
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (soldOut) return;
+    const el = e.currentTarget;
+    const rect = el.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const xc = rect.width / 2;
+    const yc = rect.height / 2;
+    const rotateX = ((yc - y) / yc) * 12; // 12 degrees max
+    const rotateY = ((x - xc) / xc) * -12;
+    el.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateY(-8px) scale(1.02)`;
+  };
+
+  const handleMouseLeave = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    el.style.transform = `perspective(1000px) rotateX(0deg) rotateY(0deg) translateY(0px) scale(1)`;
+  };
+
   return (
-    <div onClick={onClick} className={`group bg-white rounded-2xl overflow-hidden border transition-all duration-300 cursor-pointer ${soldOut ? "border-gray-200 opacity-80" : "border-pink-100 hover:border-pink-300 hover:shadow-2xl hover:shadow-pink-100"}`}>
-      <div className="relative overflow-hidden bg-pink-50 aspect-[3/4]">
-        <Photo src={p.photos[0]} alt={p.name} className={`w-full h-full object-cover transition-transform duration-500 ${soldOut ? "grayscale" : "group-hover:scale-105"}`} />
-        {/* Sold Out diagonal overlay */}
+    <div 
+      onClick={onClick} 
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+      className={`luxury-card group rounded-[22px] overflow-hidden cursor-pointer border ${soldOut ? "border-gray-200 opacity-75 bg-white" : "border-emerald-100/60 bg-white"}`} 
+      style={{ perspective: "1000px", transition: "transform 0.15s ease-out, box-shadow 0.3s ease" }}
+    >
+      <div className="relative overflow-hidden aspect-[3/4]" style={{ background: "linear-gradient(145deg,#f1f9f4,#fff7fb)" }}>
+        <Photo src={p.photos[0]} alt={p.name} className={`w-full h-full object-cover transition-transform duration-700 ${soldOut ? "grayscale" : "group-hover:scale-110"}`} />
+        {/* Nature shimmer overlay on hover */}
+        {!soldOut && <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" style={{ background: "linear-gradient(180deg,rgba(45,106,79,.04) 0%,rgba(201,168,76,.06) 50%,rgba(0,0,0,.45) 100%)" }} />}
         {soldOut && (
-          <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.35)" }}>
-            <span
-              className="text-white font-extrabold tracking-widest select-none"
-              style={{
-                fontSize: "clamp(22px, 6vw, 36px)",
-                fontStyle: "italic",
-                transform: "rotate(-30deg)",
-                textShadow: "0 2px 12px rgba(0,0,0,0.6)",
-                letterSpacing: "0.12em",
-                whiteSpace: "nowrap",
-                textTransform: "uppercase",
-              }}
-            >
-              Sold Out
-            </span>
+          <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.38)" }}>
+            <span className="text-white font-extrabold tracking-widest select-none" style={{ fontSize: "clamp(22px,6vw,36px)", fontStyle: "italic", transform: "rotate(-30deg)", textShadow: "0 2px 12px rgba(0,0,0,.6)", letterSpacing: "0.12em", whiteSpace: "nowrap", textTransform: "uppercase" }}>Sold Out</span>
           </div>
         )}
-        {!soldOut && d > 0 && <div className="absolute top-3 left-3 bg-gradient-to-r from-pink-500 to-rose-500 text-white text-[11px] font-bold px-2.5 py-1 rounded-full">-{d}%</div>}
+        {/* Discount badge – gold */}
+        {!soldOut && d > 0 && <div className="absolute top-3 left-3 text-white text-[11px] font-bold px-2.5 py-1 rounded-full luxury-popout-badge" style={{ background: "linear-gradient(135deg,#c9a84c,#f0d060)", boxShadow: "0 2px 8px rgba(201,168,76,.5)" }}>HEMAT {d}%</div>}
         {!soldOut && (
-          <div className="absolute top-3 right-3">
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${p.condition === "Sangat Baik" || p.condition === "Baru" ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"}`}>{p.condition}</span>
+          <div className="absolute top-3 right-3 luxury-popout-badge">
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full backdrop-blur-sm ${p.condition === "Sangat Baik" || p.condition === "Baru" ? "bg-emerald-100/90 text-emerald-700" : "bg-blue-100/90 text-blue-700"}`}>{p.condition}</span>
           </div>
         )}
         {!soldOut && (
-          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end">
+          <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-400 flex items-end pointer-events-none">
             <div className="w-full px-4 pb-4">
-              <div className="bg-white/95 backdrop-blur-sm text-pink-600 font-bold text-sm py-2.5 rounded-xl text-center flex items-center justify-center gap-2">
+              <div className="nature-glass text-emerald-700 font-bold text-sm py-2.5 rounded-2xl text-center flex items-center justify-center gap-2">
                 <Eye size={14} /> Lihat Detail
               </div>
             </div>
           </div>
         )}
       </div>
-      <div className="p-4 space-y-2">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-[10px] font-semibold text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full">{p.category}</span>
+      <div className="p-4 space-y-2 luxury-card-inner">
+        <div className="flex items-center gap-1.5 flex-wrap luxury-popout-title">
+          <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">{p.category}</span>
           {p.brand && p.brand !== "Unbranded" && <span className="text-[10px] font-semibold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-full">{p.brand}</span>}
           {soldOut && <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">Habis</span>}
         </div>
-        <h3 className={`font-semibold text-sm leading-snug line-clamp-2 ${soldOut ? "text-gray-400" : "text-[#1a0a2e]"}`}>{p.name}</h3>
-        <div>
+        <h3 className={`font-semibold text-sm leading-snug line-clamp-2 luxury-popout-title ${soldOut ? "text-gray-400" : "text-[#1a0a2e]"}`}>{p.name}</h3>
+        <div className="luxury-popout-price">
           <p className={`text-base font-extrabold ${soldOut ? "text-gray-400 line-through" : "text-pink-600"}`}>{fmt(p.price)}</p>
           {!soldOut && p.originalPrice > p.price && <p className="text-xs text-gray-400 line-through">{fmt(p.originalPrice)}</p>}
         </div>
@@ -260,6 +446,7 @@ function ProductCard({ p, onClick }: { p: Product; onClick: () => void }) {
     </div>
   );
 }
+
 
 function ProductDetail({ p, onBack }: { p: Product; onBack: () => void }) {
   const [activePhoto, setActivePhoto] = useState(0);
@@ -376,37 +563,53 @@ function CatalogPage({ products, onDetail }: { products: Product[]; onDetail: (p
   });
   return (
     <>
-      {/* Hero */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-[#fff7fb] via-white to-[#f5f0ff] py-20">
-        <div className="absolute -top-24 -right-24 w-96 h-96 bg-pink-200/30 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-16 -left-16 w-72 h-72 bg-violet-200/30 rounded-full blur-3xl pointer-events-none" />
+      {/* ── NATURE LUXURY HERO ── */}
+      <section className="relative overflow-hidden py-24 nature-hero-bg border-b border-emerald-100/50">
+        {/* Large organic blobs */}
+        <div className="absolute -top-32 -right-32 w-[500px] h-[500px] rounded-full pointer-events-none" style={{background:"radial-gradient(circle,rgba(45,106,79,.08) 0%,transparent 70%)",filter:"blur(60px)"}} />
+        <div className="absolute -bottom-24 -left-24 w-[400px] h-[400px] rounded-full pointer-events-none" style={{background:"radial-gradient(circle,rgba(201,168,76,.06) 0%,transparent 70%)",filter:"blur(50px)"}} />
+
         <div className="max-w-4xl mx-auto px-5 text-center relative">
-          <div className="inline-flex items-center gap-2 bg-pink-100 text-pink-600 text-xs font-bold px-4 py-1.5 rounded-full mb-6">
-            <Heart size={12} className="fill-pink-500" /> Official Preloved Store Indonesia
+          {/* Nature badge */}
+          <div className="inline-flex items-center gap-2.5 nature-badge text-xs font-bold px-5 py-2 rounded-full mb-7 shadow-sm">
+            <svg width="14" height="16" viewBox="0 0 14 16"><path d="M7 0 C11 3,14 8,7 16 C0 8,3 3,7 0Z" fill="#2d6a4f"/></svg>
+            ✦ Official Preloved Store Indonesia – Nature Collection ✦
           </div>
-          <h1 className="text-5xl md:text-6xl font-extrabold text-[#1a0a2e] leading-tight mb-5" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
-            Temukan Preloved <br /><span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-violet-500 to-indigo-500">Berkualitas</span>
+          {/* Heading */}
+          <h1 className="text-5xl md:text-6xl font-extrabold text-[#1a0a2e] leading-tight mb-5" style={{ fontFamily: "'Cormorant Garamond','Plus Jakarta Sans',serif" }}>
+            Temukan Preloved <br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 via-teal-600 to-amber-600">Berkualitas</span>
           </h1>
           <p className="text-lg text-gray-500 max-w-xl mx-auto mb-8 leading-relaxed">Barang pilihan, kondisi terawat, foto asli, dan langsung bisa dibeli melalui Shopee.</p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <a href="#katalog" className="inline-flex items-center gap-2 bg-gradient-to-r from-pink-500 to-violet-600 text-white font-bold px-7 py-3.5 rounded-full hover:shadow-xl hover:shadow-pink-200 transition-all"><Tag size={16} /> Lihat Koleksi</a>
-            <a href="https://s.shopee.co.id/gOm3vwsWI?share_channel_code=1" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 bg-gradient-to-r from-orange-400 to-orange-500 text-white font-bold px-7 py-3.5 rounded-full hover:shadow-xl hover:shadow-orange-200 transition-all"><ShoppingBag size={16} /> Belanja di Shopee</a>
+            <a href="#katalog" className="inline-flex items-center gap-2 text-white font-bold px-8 py-3.5 rounded-full hover:shadow-xl hover:scale-105 transition-all" style={{background:"linear-gradient(135deg,#2d6a4f,#4a9e6a)",boxShadow:"0 8px 24px rgba(45,106,79,.25)"}}>
+              <svg width="16" height="16" viewBox="0 0 16 18"><path d="M8 0C12 3,16 8,8 18C0 8,4 3,8 0Z" fill="white" opacity=".9"/></svg>
+              Lihat Koleksi
+            </a>
+            <a href="https://s.shopee.co.id/gOm3vwsWI?share_channel_code=1" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 bg-gradient-to-r from-orange-400 to-orange-500 text-white font-bold px-8 py-3.5 rounded-full hover:shadow-xl hover:shadow-orange-200 hover:scale-105 transition-all">
+              <ShoppingBag size={16} /> Belanja di Shopee
+            </a>
           </div>
         </div>
-        <div className="max-w-3xl mx-auto px-5 mt-14 grid grid-cols-2 md:grid-cols-4 gap-4">
+
+        {/* Trust badges – nature glass style */}
+        <div className="max-w-3xl mx-auto px-5 mt-14 grid grid-cols-2 md:grid-cols-4 gap-4 relative z-10">
           {[
-            { icon: <Camera size={15} className="text-pink-500" />, label: "Foto Asli Produk" },
-            { icon: <CheckCircle2 size={15} className="text-green-500" />, label: "Kondisi Terawat" },
-            { icon: <Shield size={15} className="text-violet-500" />, label: "Terpercaya" },
-            { icon: <Truck size={15} className="text-blue-500" />, label: "Kirim via Shopee" },
+            { icon: <Camera size={15} className="text-pink-500" />, label: "Foto Asli Produk",   leafColor:"#ec4899" },
+            { icon: <CheckCircle2 size={15} className="text-emerald-600" />, label: "Kondisi Terawat", leafColor:"#2d6a4f" },
+            { icon: <Shield size={15} className="text-violet-500" />, label: "Terpercaya",         leafColor:"#7c3aed" },
+            { icon: <Truck size={15} className="text-blue-500" />, label: "Kirim via Shopee",    leafColor:"#2563eb" },
           ].map(({ icon, label }) => (
-            <div key={label} className="flex items-center gap-2.5 bg-white/80 backdrop-blur-sm rounded-2xl px-4 py-3 shadow-sm border border-pink-100 text-sm font-semibold text-[#1a0a2e]">
-              <div className="w-7 h-7 rounded-lg bg-pink-50 flex items-center justify-center flex-shrink-0">{icon}</div>
+            <div key={label} className="flex items-center gap-2.5 nature-glass rounded-2xl px-4 py-3 text-sm font-semibold text-[#1a0a2e] hover:scale-[1.03] transition-all cursor-default">
+              <div className="w-7 h-7 rounded-lg bg-white/70 flex items-center justify-center flex-shrink-0 shadow-sm">{icon}</div>
               {label}
             </div>
           ))}
         </div>
+        {/* Gold thin divider */}
+        <div className="gold-divider mt-16 mx-auto max-w-2xl" />
       </section>
+
 
       {/* Catalog */}
       <section id="katalog" className="max-w-7xl mx-auto px-5 py-14">
@@ -541,40 +744,60 @@ function AboutPage() {
 
 function Footer({ onNav }: { onNav: (p: Page) => void }) {
   return (
-    <footer className="bg-[#1a0a2e] text-white mt-auto">
-      <div className="max-w-7xl mx-auto px-5 py-12 grid grid-cols-1 md:grid-cols-3 gap-8">
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-pink-500 to-violet-600 flex items-center justify-center"><Sparkles size={14} className="text-white" /></div>
-            <span className="font-extrabold text-lg" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>SherlyPreloved</span>
+    <footer className="nature-footer text-white mt-auto relative overflow-hidden">
+      {/* Botanical decoration */}
+      <div className="absolute top-0 left-0 opacity-5 pointer-events-none">
+        <svg width="200" height="200" viewBox="0 0 200 200">
+          <path d="M100 0 C150 30,200 80,100 200 C0 80,50 30,100 0Z" fill="#4a9e6a"/>
+          <path d="M100 0 L100 200" stroke="white" strokeWidth="2" fill="none"/>
+        </svg>
+      </div>
+      <div className="absolute top-0 right-0 opacity-5 pointer-events-none">
+        <svg width="160" height="200" viewBox="0 0 160 200">
+          <path d="M80 0 C120 25,160 70,80 200 C0 70,40 25,80 0Z" fill="#c9a84c"/>
+        </svg>
+      </div>
+      {/* Gold divider at top */}
+      <div className="gold-divider" />
+      <div className="max-w-7xl mx-auto px-5 py-14 grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-2xl flex items-center justify-center" style={{background:"linear-gradient(135deg,#2d6a4f,#4a9e6a)",boxShadow:"0 4px 12px rgba(45,106,79,.4)"}}>
+              <Sparkles size={15} className="text-white" />
+            </div>
+            <div>
+              <span className="font-extrabold text-lg" style={{ fontFamily: "'Cormorant Garamond','Plus Jakarta Sans',serif" }}>SherlyPreloved</span>
+              <div className="text-[9px] tracking-widest text-emerald-400/70 uppercase font-semibold">✦ Nature Collection ✦</div>
+            </div>
           </div>
-          <p className="text-sm text-white/50 leading-relaxed">Official preloved store dengan koleksi pilihan berkualitas. Beli langsung via Shopee.</p>
+          <p className="text-sm text-white/50 leading-relaxed">Official preloved store dengan koleksi pilihan berkualitas & sentuhan alam. Beli langsung via Shopee.</p>
           <div className="flex gap-3 pt-1">
-            <a href="https://s.shopee.co.id/gOm3vwsWI?share_channel_code=1" target="_blank" rel="noopener noreferrer" className="w-9 h-9 rounded-full bg-white/10 hover:bg-orange-500 flex items-center justify-center transition-colors"><ShoppingBag size={15} /></a>
-            <a href="https://www.instagram.com/shrlyagg/?utm_source=ig_web_button_share_sheet" target="_blank" rel="noopener noreferrer" className="w-9 h-9 rounded-full bg-white/10 hover:bg-pink-600 flex items-center justify-center transition-colors"><Instagram size={15} /></a>
+            <a href="https://s.shopee.co.id/gOm3vwsWI?share_channel_code=1" target="_blank" rel="noopener noreferrer" className="w-9 h-9 rounded-full bg-white/10 hover:bg-orange-500 hover:scale-110 flex items-center justify-center transition-all"><ShoppingBag size={15} /></a>
+            <a href="https://www.instagram.com/shrlyagg/?utm_source=ig_web_button_share_sheet" target="_blank" rel="noopener noreferrer" className="w-9 h-9 rounded-full bg-white/10 hover:bg-pink-600 hover:scale-110 flex items-center justify-center transition-all"><Instagram size={15} /></a>
           </div>
         </div>
         <div>
-          <h4 className="font-bold text-sm mb-4">Navigasi</h4>
+          <h4 className="font-bold text-sm mb-4 text-emerald-400/80 uppercase tracking-wider">Navigasi</h4>
           <ul className="space-y-2">
             {([["Katalog Produk", "catalog"], ["Tentang Toko", "about"]] as [string, Page][]).map(([l, p]) => (
-              <li key={p}><button onClick={() => onNav(p)} className="text-sm text-white/50 hover:text-white transition-colors">{l}</button></li>
+              <li key={p}><button onClick={() => onNav(p)} className="text-sm text-white/50 hover:text-emerald-300 transition-colors">{l}</button></li>
             ))}
             <li><a href="https://s.shopee.co.id/gOm3vwsWI?share_channel_code=1" target="_blank" rel="noopener noreferrer" className="text-sm text-white/50 hover:text-orange-400 transition-colors flex items-center gap-1">Shopee <ExternalLink size={10} /></a></li>
           </ul>
         </div>
         <div>
-          <h4 className="font-bold text-sm mb-4">Info</h4>
+          <h4 className="font-bold text-sm mb-4 text-emerald-400/80 uppercase tracking-wider">Info</h4>
           <ul className="space-y-2">
-            <li className="flex items-center gap-2 text-sm text-white/50"><MapPin size={13} className="text-pink-400 flex-shrink-0" /> Sidoarjo, Indonesia</li>
+            <li className="flex items-center gap-2 text-sm text-white/50"><MapPin size={13} className="text-emerald-400 flex-shrink-0" /> Sidoarjo, Indonesia</li>
             <li className="flex items-center gap-2 text-sm text-white/50"><MessageCircle size={13} className="text-green-400 flex-shrink-0" /> Respon cepat via Shopee</li>
             <li className="flex items-center gap-2 text-sm text-white/50"><Truck size={13} className="text-blue-400 flex-shrink-0" /> Pengiriman ke seluruh Indonesia</li>
           </ul>
         </div>
       </div>
       <div className="border-t border-white/10 px-5 py-4">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-2 text-xs text-white/30">
-          <p>© 2026 SherlyPreloved. All rights reserved.</p>
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-2 text-xs text-white/25">
+          <p>© 2026 SherlyPreloved – Nature Collection. All rights reserved.</p>
+          <p className="text-emerald-400/40">✦ Preloved · Alam · Mewah ✦</p>
         </div>
       </div>
     </footer>
@@ -1763,7 +1986,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-white flex flex-col" style={{ fontFamily: "'Poppins',sans-serif" }}>
+    <div className="min-h-screen flex flex-col" style={{ fontFamily: "'Poppins',sans-serif", background: "linear-gradient(180deg,#faf7ee 0%,#ffffff 30%,#f1f9f4 70%,#fefbf2 100%)" }}>
       <Toaster position="top-center" richColors />
       <Navbar onNav={nav} page={page} />
       <main className="flex-1">
@@ -1776,6 +1999,7 @@ export default function App() {
     </div>
   );
 }
+
 
 // ─── Guest Chat Widget (public, no login) ─────────────────────────────────────
 function GuestChatWidget() {
