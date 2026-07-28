@@ -1,0 +1,9 @@
+{
+  "outputDirectory": "public/app",
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/db"
+    }
+  ]
+}
