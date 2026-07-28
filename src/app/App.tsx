@@ -2048,7 +2048,9 @@ export default function App() {
                 onEdit={(p) => { setEditProd(p); nav("admin-edit"); }}
                 onDelete={async (id) => {
                   const toastId = toast.loading("Menghapus produk...");
+                  let originalProducts: Product[] = [];
                   setProducts((prev) => {
+                    originalProducts = prev;
                     const next = prev.filter((p) => p.id !== id);
                     saveProds(next);
                     return next;
@@ -2059,9 +2061,17 @@ export default function App() {
                       toast.success("Produk berhasil dihapus!", { id: toastId });
                     } else {
                       toast.error("Gagal menghapus dari cloud.", { id: toastId });
+                      if (originalProducts.length > 0) {
+                        setProducts(originalProducts);
+                        saveProds(originalProducts);
+                      }
                     }
                   } catch (e) {
                     toast.error("Gagal menghapus dari cloud.", { id: toastId });
+                    if (originalProducts.length > 0) {
+                      setProducts(originalProducts);
+                      saveProds(originalProducts);
+                    }
                   }
                 }}
                 onToggle={async (id) => {

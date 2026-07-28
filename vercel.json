@@ -1,9 +1,22 @@
 {
-  "outputDirectory": "public/app",
-  "rewrites": [
+  "version": 2,
+  "functions": {
+    "api/index.php": {
+      "runtime": "vercel-php@0.7.2"
+    }
+  },
+  "routes": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api/db"
+      "src": "/api/(.*)",
+      "dest": "api/index.php"
+    },
+    {
+      "src": "/assets/(.*)",
+      "dest": "public/app/assets/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "public/app/index.html"
     }
   ]
 }
