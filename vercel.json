@@ -14,7 +14,7 @@
   "env": {
     "APP_NAME": "SherlyPreloved",
     "APP_ENV": "production",
-    "APP_DEBUG": "false",
+    "APP_DEBUG": "true",
     "APP_URL": "https://sherlypreloved.vercel.app",
     "APP_KEY": "base64:JyfuZYrHEifDf4t5bLp3IUARXDq5tze/8txbxBReTCo=",
     "VERCEL": "1",
