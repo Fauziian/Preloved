@@ -5,9 +5,9 @@ node_modules/
 # Build output
 dist/
 build/
+public/app/
 
 # Environment
-.env
 .env.local
 .env.*.local
 
@@ -19,10 +19,6 @@ pnpm-debug.log*
 # Editor
 .vscode/
 .idea/
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
 
 # OS
 .DS_Store
@@ -31,13 +27,13 @@ Thumbs.db
 # Vercel
 .vercel
 
-.vercel
-.env*
-
-# Laravel specific ignores
+# Laravel
 /vendor/
-/bootstrap/cache/
+/bootstrap/cache/*.php
 /storage/framework/
 /storage/logs/
-/storage/app/
+/storage/app/public/
 database/database.sqlite-journal
+
+# Don't ignore database.sqlite (needed for seeded data on Vercel)
+# database/database.sqlite

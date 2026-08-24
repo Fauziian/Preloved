@@ -1,6 +1,5 @@
 {
   "version": 2,
-  "outputDirectory": "public/app",
   "functions": {
     "api/index.php": {
       "runtime": "vercel-php@0.7.2"
@@ -8,16 +7,17 @@
   },
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "api/index.php"
-    },
-    {
-      "src": "/assets/(.*)",
-      "dest": "/assets/$1"
-    },
-    {
       "src": "/(.*)",
-      "dest": "/index.html"
+      "dest": "api/index.php"
     }
-  ]
+  ],
+  "env": {
+    "APP_ENV": "production",
+    "APP_DEBUG": "false",
+    "VERCEL": "1",
+    "DB_CONNECTION": "sqlite",
+    "SESSION_DRIVER": "cookie",
+    "CACHE_STORE": "file",
+    "LOG_CHANNEL": "stderr"
+  }
 }

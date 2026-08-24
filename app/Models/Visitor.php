@@ -6,13 +6,11 @@ use Illuminate\Database\Eloquent\Model;
 
 class Visitor extends Model
 {
-    protected $keyType = 'string';
-    public $incrementing = false;
+    protected $primaryKey = 'id';
+    protected $keyType    = 'string';
+    public    $incrementing = false;
 
-    protected $fillable = [
-        'id',
-        'data',
-    ];
+    protected $fillable = ['id', 'data'];
 
     protected $casts = [
         'data' => 'array',

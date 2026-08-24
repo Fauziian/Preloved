@@ -7,41 +7,17 @@ use Illuminate\Http\Request;
 
 class VisitorController extends Controller
 {
-    public function index()
+    public function reset()
     {
-        $visitor = Visitor::find('global');
-        if (!$visitor) {
-            return response()->json([
-                'totalVisits' => 0,
-                'totalPageViews' => 0,
-                'daily' => [],
-                'productViews' => new \stdClass(),
-                'referrers' => new \stdClass(),
-                'devices' => new \stdClass(),
-            ]);
-        }
-        return response()->json($visitor->data);
-    }
-
-    public function store(Request $request)
-    {
-        $data = $request->validate([
-            'totalVisits' => 'required|integer',
-            'totalPageViews' => 'required|integer',
-            'daily' => 'nullable|array',
-            'productViews' => 'nullable|array',
-            'referrers' => 'nullable|array',
-            'devices' => 'nullable|array',
-        ]);
-
-        $visitor = Visitor::updateOrCreate(
-            ['id' => 'global'],
-            ['data' => $data]
-        );
-
-        return response()->json([
-            'status' => 'success',
-            'data' => $visitor->data
-        ]);
+        $blank = [
+            'totalVisits'    => 0,
+            'totalPageViews' => 0,
+            'daily'          => [],
+            'productViews'   => [],
+            'referrers'      => [],
+            'devices'        => [],
+        ];
+        Visitor::updateOrCreate(['id' => 'global'], ['data' => $blank]);
+        return redirect()->route('admin.visitors')->with('success', 'Data pengunjung berhasil direset.');
     }
 }

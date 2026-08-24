@@ -7,119 +7,38 @@ use Illuminate\Http\Request;
 
 class ChatController extends Controller
 {
-    public function index()
+    public function reply(Request $request, $sessionId)
     {
-        // Return chats mapped to frontend naming (sessionId, guestLabel, unreadByAdmin, lastActivity, messages)
-        $chats = Chat::all()->map(function ($chat) {
-            return [
-                'sessionId' => $chat->session_id,
-                'guestLabel' => $chat->guest_label,
-                'messages' => $chat->messages ?? [],
-                'lastActivity' => $chat->last_activity,
-                'unreadByAdmin' => $chat->unread_by_admin,
-            ];
-        });
+        $request->validate(['message' => 'required|string|max:2000']);
 
-        return response()->json($chats);
-    }
+        $chat = Chat::where('session_id', $sessionId)->firstOrFail();
 
-    public function store(Request $request)
-    {
-        $data = $request->validate([
-            'sessionId' => 'required|string',
-            'guestLabel' => 'required|string',
-            'messages' => 'nullable|array',
-            'lastActivity' => 'required|numeric',
-            'unreadByAdmin' => 'required|integer',
+        $messages   = $chat->messages ?? [];
+        $messages[] = [
+            'id'   => uniqid('admin_', true),
+            'from' => 'admin',
+            'text' => $request->message,
+            'ts'   => round(microtime(true) * 1000),
+        ];
+
+        $chat->update([
+            'messages'         => $messages,
+            'last_activity'    => round(microtime(true) * 1000),
+            'unread_by_admin'  => 0,
         ]);
 
-        $chat = Chat::updateOrCreate(
-            ['session_id' => $data['sessionId']],
-            [
-                'guest_label' => $data['guestLabel'],
-                'messages' => $data['messages'] ?? [],
-                'last_activity' => $data['lastActivity'],
-                'unread_by_admin' => $data['unreadByAdmin'],
-            ]
-        );
-
-        return response()->json([
-            'status' => 'success',
-            'chat' => [
-                'sessionId' => $chat->session_id,
-                'guestLabel' => $chat->guest_label,
-                'messages' => $chat->messages,
-                'lastActivity' => $chat->last_activity,
-                'unreadByAdmin' => $chat->unread_by_admin,
-            ]
-        ]);
-    }
-
-    public function appendMessage(Request $request, $sessionId)
-    {
-        $message = $request->validate([
-            'id' => 'required|string',
-            'from' => 'required|string|in:guest,admin',
-            'text' => 'required|string',
-            'ts' => 'required|numeric',
-        ]);
-
-        $chat = Chat::where('session_id', $sessionId)->first();
-
-        if (!$chat) {
-            $chat = Chat::create([
-                'session_id' => $sessionId,
-                'guest_label' => 'Guest #' . substr($sessionId, -4),
-                'messages' => [$message],
-                'last_activity' => time() * 1000,
-                'unread_by_admin' => $message['from'] === 'guest' ? 1 : 0,
-            ]);
-        } else {
-            $messages = $chat->messages ?? [];
-            
-            // Check if message already exists
-            $exists = false;
-            foreach ($messages as $m) {
-                if (isset($m['id']) && $m['id'] === $message['id']) {
-                    $exists = true;
-                    break;
-                }
-            }
-
-            if (!$exists) {
-                $messages[] = $message;
-            }
-
-            $unread = $chat->unread_by_admin;
-            if ($message['from'] === 'guest') {
-                $unread += 1;
-            }
-
-            $chat->update([
-                'messages' => $messages,
-                'last_activity' => time() * 1000,
-                'unread_by_admin' => $unread,
-            ]);
-        }
-
-        return response()->json([
-            'status' => 'success',
-            'chat' => [
-                'sessionId' => $chat->session_id,
-                'guestLabel' => $chat->guest_label,
-                'messages' => $chat->messages,
-                'lastActivity' => $chat->last_activity,
-                'unreadByAdmin' => $chat->unread_by_admin,
-            ]
-        ]);
+        return redirect()->route('admin.chat')->with('success', 'Pesan berhasil dikirim.');
     }
 
     public function destroy($sessionId)
     {
-        $chat = Chat::where('session_id', $sessionId)->first();
-        if ($chat) {
-            $chat->delete();
-        }
-        return response()->json(['status' => 'success']);
+        Chat::where('session_id', $sessionId)->delete();
+        return redirect()->route('admin.chat')->with('success', 'Percakapan dihapus.');
+    }
+
+    public function markRead($sessionId)
+    {
+        Chat::where('session_id', $sessionId)->update(['unread_by_admin' => 0]);
+        return response()->json(['status' => 'ok']);
     }
 }
