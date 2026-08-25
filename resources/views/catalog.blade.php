@@ -28,9 +28,7 @@
 <nav class="nature-navbar sticky top-0 z-40">
     <div class="container" style="height:68px;display:flex;align-items:center;justify-content:space-between;">
         <a href="{{ route('catalog') }}" class="logo-link" style="display:flex;align-items:center;gap:10px;text-decoration:none;" id="logo-btn">
-            <div style="width:36px;height:36px;border-radius:14px;background:linear-gradient(135deg,#10b981,#2d6a4f);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(45,106,79,.3);">
-                <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" fill="white"/></svg>
-            </div>
+            <img src="{{ asset('images/logo.png') }}" style="width:36px;height:36px;object-fit:contain;" alt="SherlyPreloved Logo" />
             <span style="font-weight:800;font-size:1.2rem;color:#1a0a2e;">Sherly<span style="background:linear-gradient(135deg,#ec4899,#8b5cf6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">Preloved</span>
                 <span style="display:block;font-size:9px;font-weight:600;letter-spacing:.2em;color:rgba(45,106,79,.7);text-transform:uppercase;margin-top:-2px;">✦ Nature Collection ✦</span>
             </span>

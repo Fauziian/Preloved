@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="csrf-token" content="{{ csrf_token() }}" />
+    <link rel="icon" type="image/png" href="{{ asset('images/logo.png') }}" />
     <title>@yield('title', 'SherlyPreloved – Nature Collection')</title>
     <meta name="description" content="@yield('description', 'Toko preloved terpercaya dengan koleksi fashion berkualitas. Foto asli, kondisi terawat, harga terjangkau.')" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />

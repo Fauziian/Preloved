@@ -3,9 +3,7 @@
     <div class="container" style="padding:48px 20px 32px;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:32px;">
         <div>
             <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
-                <div style="width:36px;height:36px;border-radius:14px;background:linear-gradient(135deg,#2d6a4f,#4a9e6a);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(45,106,79,.4);">
-                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" fill="white"/></svg>
-                </div>
+                <img src="{{ asset('images/logo.png') }}" style="width:36px;height:36px;object-fit:contain;" alt="SherlyPreloved Logo" />
                 <div>
                     <span style="font-weight:800;font-size:1.1rem;color:#fff;font-family:'Cormorant Garamond',serif;">SherlyPreloved</span>
                     <div style="font-size:9px;letter-spacing:.2em;color:rgba(74,158,106,.7);text-transform:uppercase;font-weight:600;">✦ Nature Collection ✦</div>

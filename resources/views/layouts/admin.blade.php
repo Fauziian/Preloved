@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="csrf-token" content="{{ csrf_token() }}" />
+    <link rel="icon" type="image/png" href="{{ asset('images/logo.png') }}" />
     <title>@yield('title', 'Admin') – SherlyPreloved</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -61,7 +62,7 @@
 <nav class="sidebar" id="admin-sidebar">
     <div style="padding:20px 16px;border-bottom:1px solid #fce7f3;display:flex;align-items:center;justify-content:space-between;">
         <div style="display:flex;align-items:center;gap:8px;">
-            <div style="width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,#ec4899,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:.8rem;">✦</div>
+            <img src="{{ asset('images/logo.png') }}" style="width:32px;height:32px;object-fit:contain;" alt="SherlyPreloved Logo" />
             <span style="font-weight:800;font-size:.9rem;">SherlyPreloved</span>
         </div>
         <button onclick="closeSidebar()" style="display:none;background:none;border:none;cursor:pointer;font-size:1.2rem;color:#9ca3af;" id="sidebar-close">✕</button>
